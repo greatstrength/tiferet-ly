@@ -40,7 +40,7 @@ The domain has one fixed shape:
 
 > **Declare** → **translate** → **assemble** → **read**
 
-and three axes of variation:
+and four axes of variation:
 
 1. **Rule complexity** — whether a single word or sentence rule is pure
    declaration (a literal pattern, nothing else) or carries a small piece of
@@ -59,6 +59,12 @@ and three axes of variation:
    remain indifferent to this axis; nothing about the translation or
    assembly behaviors may assume a particular language's vocabulary or
    grammar.
+4. **Dialect selection** — whether a rule belongs to every use of one
+   declared language or only to one of its named subgrammars, and, when
+   more than one subgrammar is combined for a given reader, which one's
+   rules take precedence for a name they both declare. Expressed as an
+   optional tag on each rule, not as a nesting structure, so this axis
+   never disturbs axis 1's or axis 2's own shape (TLY1-RFP-001).
 
 ## 3. Ubiquitous language
 **PLY** — Python Lex-Yacc, the third-party library (`ply.lex`, `ply.yacc`)
@@ -91,6 +97,13 @@ output, and so on).
 language: its full catalogue of token rules and productions, together. This
 is what a consumer of Tiferet-Ly writes; it is the input to the domain's
 Declare step.
+
+**Subgrammar** — a named, declared dialect of one grammar declaration: a
+label an individual token rule or production may opt into so that only the
+subset relevant to a given selection is used when a reader is assembled. A
+rule declaring no subgrammar is common to every dialect. A grammar
+declares one or more subgrammars; rules do not nest inside them, they refer
+to them by name (TLY1-RFP-001).
 
 **Docstring-carried pattern** — PLY's own governing convention: PLY does not
 read a token's or production's pattern from an argument or a config value,
@@ -154,9 +167,18 @@ they are presented to it, and only sorts pattern-only (simple) token rules
 by longest-pattern-first; a declaration format that lets a complex rule and
 a simple rule quietly reorder relative to each other during translation
 would change what the resulting reader actually accepts, silently.
-Productions carry no equivalent ordering constraint from PLY itself (their
-disambiguation is a separate concern — precedence and associativity — that
-this document does not resolve; see Section 10).
+Productions carry no equivalent ordering constraint from PLY itself; their
+disambiguation is a separate concern — precedence and associativity — which
+TLY1-RFP-001 resolved by deferring it out of v1 entirely rather than
+designing a stub for it (see Section 10).
+
+A grammar declaration may also name one or more **subgrammars** — dialects
+of the same language, such as one syntax shared by every use plus
+additional rules that apply only to a specific selection. A rule opts into
+a subgrammar by name rather than being nested inside one, so the
+completeness and ordering constraints above still govern one flat,
+undivided catalogue; selecting a subgrammar filters that catalogue, it
+never restructures it (TLY1-RFP-001).
 
 At read time, the domain also operates on the raw text supplied to the
 assembled reader, and produces whatever structured result the declaration's
@@ -293,6 +315,9 @@ rather than paraphrased through Tiferet's own vocabulary.
 - Which individual rules are simple versus complex, and what a complex
   rule's action actually does with a matched token or a recognized
   production.
+- Which named subgrammars (dialects) a language declares, and which of its
+  rules belong to which, or to none — common to every dialect
+  (TLY1-RFP-001).
 - Whatever structured result a language's actions choose to build during
   5.4 — Tiferet-Ly imposes no shape on it.
 
@@ -310,7 +335,11 @@ discovering it after the fact:
   that iterates a loaded declaration's token rules without deliberately
   preserving and honoring declared order would silently reintroduce the
   exact ambiguity PLY's own convention exists to avoid, and the failure
-  would show up as a misread token, not a translation error.
+  would show up as a misread token, not a translation error. TLY1-RFP-001
+  specifies the mitigation (ordered list catalogues, never keyed mappings,
+  with subgrammar selection expressed as a filter rather than a re-sort) —
+  this entry should be removed only once implementation actually verifies
+  the order-preservation behavior it names.
 - **Complex-rule actions are, necessarily, executable code supplied by
   whoever authors a declaration.** Whatever mechanism 5.2 uses to run a
   complex rule's action (compiling and executing a supplied code fragment is
@@ -340,25 +369,33 @@ supplied text to produce a structured result or a recognition failure.
   component is built on but does not extend.
 
 ## 10. Where this leads
-1. **Author the TRD defining the grammar declaration format.** The exact
-   YAML shape for the token and production catalogues — including how
-   declared order is represented and preserved — needs to be specified and
-   validated against PLY's real ordering and completeness constraints
-   (Section 4) before any domain object design is finalized.
-2. **Author the TRD for the domain object and mapper layer.** The
-   simple/complex `DomainObject` hierarchy for token rules and productions,
-   plus their `Aggregate`/`TransferObject` pair for round-tripping a
-   declaration to and from its file, following `tiferet/mappers/core.py:26`
-   and `tiferet/mappers/core.py:92`.
+1. **Author the TRD(s) implementing the grammar declaration model and
+   format**, scoped by TLY1-RFP-001 (issue #2): the `DomainObject`
+   hierarchy for token rules and productions (simple/complex), the
+   `GrammarDeclaration` and `Subgrammar` objects, the YAML shape (the
+   `grammars` root node and how declared order is represented and
+   preserved), and the explicit v1 decisions to defer precedence/
+   associativity and keep `t_error`/`p_error` out of the declared model.
+2. **Author the TRD(s) for the mapper and repository layer.** The
+   `Aggregate`/`TransferObject` pair for round-tripping a
+   `GrammarDeclaration` to and from its file, and the
+   `ConfigurationRepository`-based repository that locates an entry via the
+   `grammars` root node and `id`, following `tiferet/mappers/core.py:26`,
+   `tiferet/mappers/core.py:92`, and `tiferet/repos/core.py:22`.
 3. **Author the TRD for the translation service (5.2).** In particular, how
    a complex rule's action is turned into running code safely, and how the
    ordering entanglement named in Section 8 is prevented rather than merely
    documented.
 4. **Author the TRD for the assembly and read events/interfaces (5.3–5.4).**
    Including the `Service` contract that keeps PLY itself behind a
-   swappable boundary, and the test harness these events would use,
-   following Tiferet's own `DomainEvent`-testing convention
+   swappable boundary; the subgrammar-selection and cross-subgrammar
+   conflict-resolution logic (declared-order tie-break, TLY1-RFP-001) that
+   combines a grammar's flat, tagged rule catalogues into the specific rule
+   set a given reader actually uses; and the test harness these events
+   would use, following Tiferet's own `DomainEvent`-testing convention
    (`tiferet/events/core.py:18`).
 
 Each is independently scopeable, and together they are the actual first
-implementation this pair of documents is meant to be measured against.
+implementation this pair of documents is meant to be measured against. The
+v1 release roadmap tracks these as RFP-001 through RFP-008; RFP-001 (item 1
+above) is the first to be scoped.
