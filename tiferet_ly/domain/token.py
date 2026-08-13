@@ -25,10 +25,10 @@ class TokenRule(DomainObject):
         description='The bare token name PLY expects after its t_ prefix.',
     )
 
-    # * attribute: subgrammar
-    subgrammar: str | None = Field(
-        default=None,
-        description='The declared Subgrammar.id this rule belongs to; None means common to every subgrammar.',
+    # * attribute: grammar_id
+    grammar_id: str = Field(
+        ...,
+        description='The id of the single Grammar this rule is declared under.',
     )
 
 # ** model: simple_token_rule

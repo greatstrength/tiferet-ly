@@ -7,8 +7,7 @@
 # Use a try-except block to avoid import errors on build systems.
 try:
     from .domain import (
-        GrammarDeclaration,
-        Subgrammar,
+        Grammar,
         ProductionRule,
         SimpleProductionRule,
         ComplexProductionRule,
