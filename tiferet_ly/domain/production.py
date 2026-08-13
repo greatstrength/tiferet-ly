@@ -24,10 +24,10 @@ class ProductionRule(DomainObject):
         description='The bare rule name PLY expects after its p_ prefix.',
     )
 
-    # * attribute: subgrammar
-    subgrammar: str | None = Field(
-        default=None,
-        description='The declared Subgrammar.id this rule belongs to; None means common to every subgrammar.',
+    # * attribute: grammar_id
+    grammar_id: str = Field(
+        ...,
+        description='The id of the single Grammar this rule is declared under.',
     )
 
 # ** model: simple_production_rule

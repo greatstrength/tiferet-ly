@@ -14,8 +14,7 @@ from .production import (
     ComplexProductionRule,
 )
 from .grammar import (
-    Subgrammar,
-    GrammarDeclaration,
+    Grammar,
 )
 
 # *** exports
@@ -27,6 +26,5 @@ __all__ = [
     'ProductionRule',
     'SimpleProductionRule',
     'ComplexProductionRule',
-    'Subgrammar',
-    'GrammarDeclaration',
+    'Grammar',
 ]
