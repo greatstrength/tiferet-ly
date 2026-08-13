@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Tiferet collaboration artifacts (local-only, not committed)
+.trd/
+.rfp/
+.handoff/
