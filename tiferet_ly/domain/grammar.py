@@ -3,93 +3,39 @@
 # *** imports
 
 # ** core
-from typing import Any, List
+from typing import List
 
 # ** infra
 from pydantic import Field, model_validator
 
 # ** app
 from tiferet.domain.core import DomainObject
-from .production import ComplexProductionRule, ProductionRule, SimpleProductionRule
-from .subgrammar import Subgrammar
-from .token import ComplexTokenRule, SimpleTokenRule, TokenRule
-
-# *** functions
-
-# ** function: expand_keyed_entries
-def expand_keyed_entries(entries: Any, key_field: str) -> Any:
-    '''
-    Expand a YAML-style sequence of single-key mappings (e.g. ``- PLUS:
-    {pattern: '+'}``) into a sequence of flat dicts carrying ``key_field``.
-    Entries already in canonical flat-dict form pass through unchanged, so
-    both declaration shapes are accepted.
-
-    :param entries: The raw catalogue entries, or any other shape (passed through unchanged).
-    :type entries: Any
-    :param key_field: The field name the single mapping key is injected under.
-    :type key_field: str
-    :return: The expanded entries, or the original value when not a list.
-    :rtype: Any
-    '''
-
-    # Only lists are eligible for expansion; anything else passes through.
-    if not isinstance(entries, list):
-        return entries
-
-    # Expand each entry that looks like a single-key YAML mapping.
-    expanded = []
-    for entry in entries:
-        if isinstance(entry, dict) and key_field not in entry and len(entry) == 1:
-            ((key, body),) = entry.items()
-            expanded.append({key_field: key, **(body or {})})
-        else:
-            expanded.append(entry)
-
-    # Return the expanded entries.
-    return expanded
-
-# ** function: build_token_rule
-def build_token_rule(entry: Any) -> Any:
-    '''
-    Construct the correct TokenRule variant from a flat dict, branching on
-    the presence of ``action``. Anything that is not a plain dict (e.g. an
-    already-constructed TokenRule instance) passes through unchanged.
-
-    :param entry: The flat rule dict, or an already-constructed instance.
-    :type entry: Any
-    :return: The constructed TokenRule instance, or the original value.
-    :rtype: Any
-    '''
-
-    # Pass through anything that is not a plain dict.
-    if not isinstance(entry, dict):
-        return entry
-
-    # Construct the complex variant when an action is present, else the simple variant.
-    return ComplexTokenRule(**entry) if 'action' in entry else SimpleTokenRule(**entry)
-
-# ** function: build_production_rule
-def build_production_rule(entry: Any) -> Any:
-    '''
-    Construct the correct ProductionRule variant from a flat dict,
-    branching on the presence of ``action``. Anything that is not a plain
-    dict (e.g. an already-constructed ProductionRule instance) passes
-    through unchanged.
-
-    :param entry: The flat rule dict, or an already-constructed instance.
-    :type entry: Any
-    :return: The constructed ProductionRule instance, or the original value.
-    :rtype: Any
-    '''
-
-    # Pass through anything that is not a plain dict.
-    if not isinstance(entry, dict):
-        return entry
-
-    # Construct the complex variant when an action is present, else the simple variant.
-    return ComplexProductionRule(**entry) if 'action' in entry else SimpleProductionRule(**entry)
+from .production import ProductionRule
+from .token import TokenRule
 
 # *** models
+
+# ** model: subgrammar
+class Subgrammar(DomainObject):
+    '''
+    A named, declared dialect of one grammar declaration. Documentation
+    only, no behavior; token and production rules refer to a subgrammar by
+    id rather than nesting inside it. Kept in this module rather than its
+    own, since TokenRule/ProductionRule only ever reference it by id,
+    never by importing the type itself.
+    '''
+
+    # * attribute: id
+    id: str = Field(
+        ...,
+        description='The unique identifier of the subgrammar within its declaring grammar.',
+    )
+
+    # * attribute: description
+    description: str | None = Field(
+        default=None,
+        description='A human-readable description of the subgrammar.',
+    )
 
 # ** model: grammar_declaration
 class GrammarDeclaration(DomainObject):
@@ -97,6 +43,13 @@ class GrammarDeclaration(DomainObject):
     The complete, declared description of one small language: its
     catalogues of token rules and productions, the subgrammars it
     supports, and its start symbol.
+
+    Deliberately format-agnostic: this model accepts already-constructed
+    TokenRule/ProductionRule/Subgrammar instances (or canonical field-name
+    dicts pydantic can build them from directly). Reading the RFP's YAML
+    sequence-of-single-key-mappings shape and dispatching simple vs.
+    complex rule construction is a mapper/TransferObject concern, not a
+    domain object concern.
     '''
 
     # * attribute: id
@@ -130,57 +83,14 @@ class GrammarDeclaration(DomainObject):
         description='The start symbol, naming a production in production_rules.',
     )
 
-    # * method: _expand_catalogues (validator)
-    @model_validator(mode='before')
-    @classmethod
-    def _expand_catalogues(cls, data: Any) -> Any:
-        '''
-        Expand the YAML sequence-of-single-key-mappings shape for
-        subgrammars, token_rules, and production_rules, dispatching token
-        and production rules to their simple or complex variant by the
-        presence of an action.
-
-        :param data: The raw input data passed to the model.
-        :type data: Any
-        :return: The (possibly augmented) input data.
-        :rtype: Any
-        '''
-
-        # Only mutate dict-shaped inputs; pass other shapes through unchanged.
-        if not isinstance(data, dict):
-            return data
-
-        # Copy so the caller's original dict is never mutated in place.
-        data = dict(data)
-
-        # Expand the subgrammar registry entries.
-        if 'subgrammars' in data:
-            data['subgrammars'] = expand_keyed_entries(data['subgrammars'], key_field='id')
-
-        # Expand and construct the token rule catalogue.
-        if 'token_rules' in data:
-            data['token_rules'] = [
-                build_token_rule(entry)
-                for entry in expand_keyed_entries(data['token_rules'], key_field='name')
-            ]
-
-        # Expand and construct the production rule catalogue.
-        if 'production_rules' in data:
-            data['production_rules'] = [
-                build_production_rule(entry)
-                for entry in expand_keyed_entries(data['production_rules'], key_field='name')
-            ]
-
-        # Return the augmented input data.
-        return data
-
     # * method: _validate_references (validator)
     @model_validator(mode='after')
     def _validate_references(self) -> 'GrammarDeclaration':
         '''
         Validate token rule name uniqueness, the start symbol reference,
         and every rule's subgrammar reference, once all catalogues have
-        been constructed.
+        been constructed. Operates only on already-built domain objects;
+        has no opinion on how those objects were produced.
 
         :return: The validated GrammarDeclaration.
         :rtype: GrammarDeclaration

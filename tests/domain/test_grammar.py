@@ -2,15 +2,17 @@
 
 # *** imports
 
+# ** core
+from typing import Any, Dict, List
+
 # ** infra
 import pytest
 import yaml
 from pydantic import ValidationError
 
 # ** app
-from tiferet_ly.domain.grammar import GrammarDeclaration
+from tiferet_ly.domain.grammar import GrammarDeclaration, Subgrammar
 from tiferet_ly.domain.production import ComplexProductionRule, ProductionRule, SimpleProductionRule
-from tiferet_ly.domain.subgrammar import Subgrammar
 from tiferet_ly.domain.token import ComplexTokenRule, SimpleTokenRule, TokenRule
 
 # *** constants
@@ -70,30 +72,171 @@ grammars:
 '''
 
 # *** functions
+#
+# The helpers below stand in for the mapper/TransferObject layer RFP-002
+# will implement: they expand the RFP's YAML sequence-of-single-key-
+# mappings shape into the domain objects GrammarDeclaration actually
+# accepts, and dispatch simple vs. complex construction. GrammarDeclaration
+# itself never sees this raw shape; it is exercised here only to prove the
+# documented format is sufficient to build a mapper against.
 
-# ** function: load_grammar
-def load_grammar(yaml_text: str, grammar_id: str) -> dict:
+# ** function: expand_keyed_entries
+def expand_keyed_entries(entries: List[Any], key_field: str) -> List[Dict[str, Any]]:
     '''
-    Parse raw YAML text and extract the entry for one declared grammar id
-    from its `grammars:` root node, injecting `id` from the mapping key,
-    mirroring the ConfigurationRepository lookup RFP-002 will implement.
+    Expand a YAML-style sequence of single-key mappings (e.g. ``- PLUS:
+    {pattern: '+'}``) into a sequence of flat dicts carrying ``key_field``.
+
+    :param entries: The raw catalogue entries.
+    :type entries: List[Any]
+    :param key_field: The field name the single mapping key is injected under.
+    :type key_field: str
+    :return: The expanded, flat-dict entries.
+    :rtype: List[Dict[str, Any]]
+    '''
+
+    # Expand each single-key YAML mapping into a flat dict.
+    expanded = []
+    for entry in entries or []:
+        ((key, body),) = entry.items()
+        expanded.append({key_field: key, **(body or {})})
+
+    # Return the expanded entries.
+    return expanded
+
+# ** function: build_token_rules
+def build_token_rules(entries: List[Any]) -> List[TokenRule]:
+    '''
+    Expand and construct the token rule catalogue, dispatching to the
+    simple or complex variant by the presence of an action.
+
+    :param entries: The raw token_rules catalogue entries.
+    :type entries: List[Any]
+    :return: The constructed TokenRule instances, in declared order.
+    :rtype: List[TokenRule]
+    '''
+
+    # Construct the correct variant for each expanded entry.
+    return [
+        ComplexTokenRule(**entry) if 'action' in entry else SimpleTokenRule(**entry)
+        for entry in expand_keyed_entries(entries, key_field='name')
+    ]
+
+# ** function: build_production_rules
+def build_production_rules(entries: List[Any]) -> List[ProductionRule]:
+    '''
+    Expand and construct the production rule catalogue, dispatching to the
+    simple or complex variant by the presence of an action.
+
+    :param entries: The raw production_rules catalogue entries.
+    :type entries: List[Any]
+    :return: The constructed ProductionRule instances, in declared order.
+    :rtype: List[ProductionRule]
+    '''
+
+    # Construct the correct variant for each expanded entry.
+    return [
+        ComplexProductionRule(**entry) if 'action' in entry else SimpleProductionRule(**entry)
+        for entry in expand_keyed_entries(entries, key_field='name')
+    ]
+
+# ** function: build_subgrammars
+def build_subgrammars(entries: List[Any]) -> List[Subgrammar]:
+    '''
+    Expand and construct the subgrammar registry.
+
+    :param entries: The raw subgrammars catalogue entries.
+    :type entries: List[Any]
+    :return: The constructed Subgrammar instances, in declared order.
+    :rtype: List[Subgrammar]
+    '''
+
+    # Construct a Subgrammar for each expanded entry.
+    return [Subgrammar(**entry) for entry in expand_keyed_entries(entries, key_field='id')]
+
+# ** function: load_grammar_kwargs
+def load_grammar_kwargs(yaml_text: str, grammar_id: str) -> Dict[str, Any]:
+    '''
+    Parse raw YAML text, extract the entry for one declared grammar id
+    from its `grammars:` root node (injecting `id` from the mapping key,
+    mirroring the ConfigurationRepository lookup RFP-002 will implement),
+    and expand it into the constructor kwargs GrammarDeclaration accepts.
 
     :param yaml_text: The raw YAML document text.
     :type yaml_text: str
     :param grammar_id: The id of the grammar declaration to extract.
     :type grammar_id: str
-    :return: The declaration body with `id` injected.
-    :rtype: dict
+    :return: The constructor kwargs for GrammarDeclaration.
+    :rtype: Dict[str, Any]
     '''
 
     # Parse the YAML document and locate the entry by id.
-    data = yaml.safe_load(yaml_text)
-    entry = data['grammars'][grammar_id]
+    entry = yaml.safe_load(yaml_text)['grammars'][grammar_id]
 
-    # Return the entry with the id injected from the mapping key.
-    return {'id': grammar_id, **entry}
+    # Expand each catalogue into constructed domain objects.
+    return {
+        'id': grammar_id,
+        'start': entry['start'],
+        'subgrammars': build_subgrammars(entry.get('subgrammars')),
+        'token_rules': build_token_rules(entry.get('token_rules')),
+        'production_rules': build_production_rules(entry.get('production_rules')),
+    }
+
+# ** function: load_grammar
+def load_grammar(yaml_text: str, grammar_id: str) -> GrammarDeclaration:
+    '''
+    Construct a GrammarDeclaration from a worked YAML example.
+
+    :param yaml_text: The raw YAML document text.
+    :type yaml_text: str
+    :param grammar_id: The id of the grammar declaration to construct.
+    :type grammar_id: str
+    :return: The constructed GrammarDeclaration.
+    :rtype: GrammarDeclaration
+    '''
+
+    # Construct the declaration from the expanded kwargs.
+    return GrammarDeclaration(**load_grammar_kwargs(yaml_text, grammar_id))
 
 # *** tests
+
+# ** test: subgrammar_construct_minimal
+def test_subgrammar_construct_minimal() -> None:
+    '''
+    Test constructing a Subgrammar with only the required id.
+    '''
+
+    # Construct the subgrammar without a description.
+    subgrammar = Subgrammar(id='core')
+
+    # Assert the fields are set correctly.
+    assert subgrammar.id == 'core'
+    assert subgrammar.description is None
+
+# ** test: subgrammar_construct_with_description
+def test_subgrammar_construct_with_description() -> None:
+    '''
+    Test constructing a Subgrammar with an id and a description.
+    '''
+
+    # Construct the subgrammar with a description.
+    subgrammar = Subgrammar(
+        id='domain',
+        description='Adds initialized attribute declarations.',
+    )
+
+    # Assert the fields are set correctly.
+    assert subgrammar.id == 'domain'
+    assert subgrammar.description == 'Adds initialized attribute declarations.'
+
+# ** test: subgrammar_requires_id
+def test_subgrammar_requires_id() -> None:
+    '''
+    Test that constructing a Subgrammar without an id raises ValidationError.
+    '''
+
+    # Missing id raises ValidationError.
+    with pytest.raises(ValidationError):
+        Subgrammar(description='Missing id.')
 
 # ** test: grammar_declaration_construct_from_worked_example
 def test_grammar_declaration_construct_from_worked_example() -> None:
@@ -103,7 +246,7 @@ def test_grammar_declaration_construct_from_worked_example() -> None:
     '''
 
     # Load and construct the declaration.
-    declaration = GrammarDeclaration(**load_grammar(ARITHMETIC_YAML, 'arithmetic'))
+    declaration = load_grammar(ARITHMETIC_YAML, 'arithmetic')
 
     # Assert the id and start symbol are set correctly.
     assert declaration.id == 'arithmetic'
@@ -115,6 +258,43 @@ def test_grammar_declaration_construct_from_worked_example() -> None:
     assert isinstance(declaration.production_rules[0], ComplexProductionRule)
     assert isinstance(declaration.production_rules[1], SimpleProductionRule)
 
+# ** test: grammar_declaration_accepts_already_constructed_instances
+def test_grammar_declaration_accepts_already_constructed_instances() -> None:
+    '''
+    Test that GrammarDeclaration can be constructed directly from
+    already-built domain objects, with no YAML involved at all.
+    '''
+
+    # Construct the declaration purely from Python objects.
+    declaration = GrammarDeclaration(
+        id='minimal',
+        start='expression',
+        subgrammars=[Subgrammar(id='core')],
+        token_rules=[SimpleTokenRule(name='PLUS', pattern=r'\+')],
+        production_rules=[SimpleProductionRule(name='expression', spec='expression : PLUS')],
+    )
+
+    # Assert the declaration constructed successfully.
+    assert declaration.id == 'minimal'
+    assert declaration.token_rules[0].name == 'PLUS'
+
+# ** test: grammar_declaration_rejects_raw_yaml_shaped_entries
+def test_grammar_declaration_rejects_raw_yaml_shaped_entries() -> None:
+    '''
+    Test that GrammarDeclaration does not itself interpret the YAML
+    sequence-of-single-key-mappings shape; passing raw, unexpanded entries
+    raises ValidationError since they don't match TokenRule's own fields.
+    This is the domain/mapper boundary the mapper layer is responsible for.
+    '''
+
+    # Build kwargs with a raw, unexpanded YAML-shaped token rule entry.
+    kwargs = load_grammar_kwargs(ARITHMETIC_YAML, 'arithmetic')
+    kwargs['token_rules'] = [{'MALFORMED': {}}]
+
+    # Constructing with the raw shape raises ValidationError.
+    with pytest.raises(ValidationError):
+        GrammarDeclaration(**kwargs)
+
 # ** test: grammar_declaration_multi_grammar_root_node
 def test_grammar_declaration_multi_grammar_root_node() -> None:
     '''
@@ -122,15 +302,9 @@ def test_grammar_declaration_multi_grammar_root_node() -> None:
     can be looked up by id, with id injected rather than duplicated.
     '''
 
-    # Merge two documents' grammars: root nodes, as one multi-language file would hold.
-    combined_grammars = {
-        **yaml.safe_load(ARITHMETIC_YAML)['grammars'],
-        **yaml.safe_load(MULTI_SUBGRAMMAR_YAML)['grammars'],
-    }
-
     # Both entries are locatable by id, with id injected from the mapping key.
-    arithmetic = GrammarDeclaration(id='arithmetic', **combined_grammars['arithmetic'])
-    tiferet_module = GrammarDeclaration(id='tiferet_module', **combined_grammars['tiferet_module'])
+    arithmetic = load_grammar(ARITHMETIC_YAML, 'arithmetic')
+    tiferet_module = load_grammar(MULTI_SUBGRAMMAR_YAML, 'tiferet_module')
 
     # Assert both declarations constructed with their own id.
     assert arithmetic.id == 'arithmetic'
@@ -145,7 +319,7 @@ def test_token_rule_order_preserved_from_declaration() -> None:
     '''
 
     # Construct the declaration from the worked example.
-    declaration = GrammarDeclaration(**load_grammar(ARITHMETIC_YAML, 'arithmetic'))
+    declaration = load_grammar(ARITHMETIC_YAML, 'arithmetic')
 
     # Assert declared order is preserved exactly, not re-sorted.
     assert [rule.name for rule in declaration.token_rules] == ['ZETA', 'PLUS', 'NUMBER']
@@ -156,28 +330,13 @@ def test_grammar_declaration_requires_valid_start() -> None:
     Test that a start naming no declared production raises ValidationError.
     '''
 
-    # Build declaration data with a start that names no production.
-    data = load_grammar(ARITHMETIC_YAML, 'arithmetic')
-    data['start'] = 'nonexistent'
+    # Build declaration kwargs with a start that names no production.
+    kwargs = load_grammar_kwargs(ARITHMETIC_YAML, 'arithmetic')
+    kwargs['start'] = 'nonexistent'
 
     # Constructing with an invalid start raises ValidationError.
     with pytest.raises(ValidationError):
-        GrammarDeclaration(**data)
-
-# ** test: grammar_declaration_rejects_malformed_rule
-def test_grammar_declaration_rejects_malformed_rule() -> None:
-    '''
-    Test that a token rule with neither action nor pattern raises
-    ValidationError rather than silently producing a partial rule.
-    '''
-
-    # Build declaration data with a malformed token rule (no pattern, no action).
-    data = load_grammar(ARITHMETIC_YAML, 'arithmetic')
-    data['token_rules'] = [{'MALFORMED': {}}]
-
-    # Constructing with the malformed rule raises ValidationError.
-    with pytest.raises(ValidationError):
-        GrammarDeclaration(**data)
+        GrammarDeclaration(**kwargs)
 
 # ** test: grammar_declaration_rejects_duplicate_token_names
 def test_grammar_declaration_rejects_duplicate_token_names() -> None:
@@ -185,13 +344,16 @@ def test_grammar_declaration_rejects_duplicate_token_names() -> None:
     Test that declaring the same token rule name twice raises ValidationError.
     '''
 
-    # Build declaration data with a duplicated token rule name.
-    data = load_grammar(ARITHMETIC_YAML, 'arithmetic')
-    data['token_rules'] = [{'PLUS': {'pattern': '+'}}, {'PLUS': {'pattern': '++'}}]
+    # Build declaration kwargs with a duplicated token rule name.
+    kwargs = load_grammar_kwargs(ARITHMETIC_YAML, 'arithmetic')
+    kwargs['token_rules'] = [
+        SimpleTokenRule(name='PLUS', pattern='+'),
+        SimpleTokenRule(name='PLUS', pattern='++'),
+    ]
 
     # Constructing with duplicate token names raises ValidationError.
     with pytest.raises(ValidationError):
-        GrammarDeclaration(**data)
+        GrammarDeclaration(**kwargs)
 
 # ** test: grammar_declaration_requires_non_empty_subgrammars
 def test_grammar_declaration_requires_non_empty_subgrammars() -> None:
@@ -199,13 +361,13 @@ def test_grammar_declaration_requires_non_empty_subgrammars() -> None:
     Test that an empty subgrammars list raises ValidationError.
     '''
 
-    # Build declaration data with an empty subgrammars list.
-    data = load_grammar(ARITHMETIC_YAML, 'arithmetic')
-    data['subgrammars'] = []
+    # Build declaration kwargs with an empty subgrammars list.
+    kwargs = load_grammar_kwargs(ARITHMETIC_YAML, 'arithmetic')
+    kwargs['subgrammars'] = []
 
     # Constructing with an empty subgrammars list raises ValidationError.
     with pytest.raises(ValidationError):
-        GrammarDeclaration(**data)
+        GrammarDeclaration(**kwargs)
 
 # ** test: grammar_declaration_rejects_undeclared_subgrammar_reference
 def test_grammar_declaration_rejects_undeclared_subgrammar_reference() -> None:
@@ -214,13 +376,13 @@ def test_grammar_declaration_rejects_undeclared_subgrammar_reference() -> None:
     raises ValidationError.
     '''
 
-    # Build declaration data with a rule referencing an undeclared subgrammar.
-    data = load_grammar(ARITHMETIC_YAML, 'arithmetic')
-    data['token_rules'][0]['ZETA']['subgrammar'] = 'nonexistent'
+    # Build declaration kwargs with a rule referencing an undeclared subgrammar.
+    kwargs = load_grammar_kwargs(ARITHMETIC_YAML, 'arithmetic')
+    kwargs['token_rules'] = [SimpleTokenRule(name='ZETA', pattern='z', subgrammar='nonexistent')]
 
     # Constructing with the undeclared subgrammar reference raises ValidationError.
     with pytest.raises(ValidationError):
-        GrammarDeclaration(**data)
+        GrammarDeclaration(**kwargs)
 
 # ** test: grammar_declaration_multi_subgrammar_common_and_tagged_rules
 def test_grammar_declaration_multi_subgrammar_common_and_tagged_rules() -> None:
@@ -230,7 +392,7 @@ def test_grammar_declaration_multi_subgrammar_common_and_tagged_rules() -> None:
     '''
 
     # Load and construct the multi-subgrammar declaration.
-    declaration = GrammarDeclaration(**load_grammar(MULTI_SUBGRAMMAR_YAML, 'tiferet_module'))
+    declaration = load_grammar(MULTI_SUBGRAMMAR_YAML, 'tiferet_module')
 
     # Assert the common and tagged rules are both present with correct tags.
     common_rules = [rule for rule in declaration.token_rules if rule.subgrammar is None]
@@ -246,7 +408,7 @@ def test_grammar_declaration_filtering_preserves_declared_order() -> None:
     '''
 
     # Load the multi-subgrammar declaration.
-    declaration = GrammarDeclaration(**load_grammar(MULTI_SUBGRAMMAR_YAML, 'tiferet_module'))
+    declaration = load_grammar(MULTI_SUBGRAMMAR_YAML, 'tiferet_module')
 
     # Filter to common-plus-domain rules, as a subgrammar-selecting consumer would.
     filtered = [

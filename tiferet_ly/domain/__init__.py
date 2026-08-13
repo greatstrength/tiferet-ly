@@ -13,10 +13,8 @@ from .production import (
     SimpleProductionRule,
     ComplexProductionRule,
 )
-from .subgrammar import (
-    Subgrammar,
-)
 from .grammar import (
+    Subgrammar,
     GrammarDeclaration,
 )
 

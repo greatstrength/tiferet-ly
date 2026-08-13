@@ -1,6 +1,6 @@
 [project]
 name = "tiferet-ly"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A Tiferet-based wrapper around PLY (Python Lex-Yacc) that lets a small language's vocabulary and grammar be declared rather than hand-wired into PLY's own code-shaped conventions."
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
@@ -30,6 +30,9 @@ include = [
     "tiferet_ly",
     "tiferet_ly.domain",
 ]
+
+[tool.setuptools.dynamic]
+version = { attr = "tiferet_ly.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
