@@ -14,7 +14,7 @@ from tiferet_ly.domain.production import (
     ComplexProductionRule,
     SimpleProductionRule,
 )
-from tiferet_ly.mappers.keyed_entries import (
+from tiferet_ly.mappers.core import (
     expand_keyed_entries,
     wrap_keyed_entries,
 )

@@ -6,7 +6,7 @@
 from typing import Any, ClassVar, Dict
 
 # ** app
-from tiferet.mappers.core import (
+from tiferet import (
     Aggregate,
     TransferObject,
 )

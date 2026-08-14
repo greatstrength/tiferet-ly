@@ -3,6 +3,10 @@
 # *** imports
 
 # ** app
+from .core import (
+    expand_keyed_entries,
+    wrap_keyed_entries,
+)
 from .token import (
     TokenRuleAggregate,
     TokenRuleConfigObject,
@@ -15,20 +19,16 @@ from .grammar import (
     GrammarAggregate,
     GrammarConfigObject,
 )
-from .keyed_entries import (
-    expand_keyed_entries,
-    wrap_keyed_entries,
-)
 
 # *** exports
 
 __all__ = [
+    'expand_keyed_entries',
+    'wrap_keyed_entries',
     'TokenRuleAggregate',
     'TokenRuleConfigObject',
     'ProductionRuleAggregate',
     'ProductionRuleConfigObject',
     'GrammarAggregate',
     'GrammarConfigObject',
-    'expand_keyed_entries',
-    'wrap_keyed_entries',
 ]

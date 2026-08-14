@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Dict, Optional, Union
 from pydantic import Field
 
 # ** app
-from tiferet.mappers.core import (
+from tiferet import (
     Aggregate,
     TransferObject,
 )

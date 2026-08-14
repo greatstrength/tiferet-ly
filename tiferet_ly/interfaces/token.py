@@ -7,7 +7,7 @@ from abc import abstractmethod
 from typing import List, Optional, Union
 
 # ** app
-from tiferet.interfaces.core import Service
+from tiferet import Service
 from ..domain.token import (
     ComplexTokenRule,
     SimpleTokenRule,

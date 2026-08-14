@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 # ** app
 from tiferet.repos.core import ConfigurationRepository
 from ..interfaces.token import TokenService
-from ..mappers.keyed_entries import (
+from ..mappers.core import (
     expand_keyed_entries,
     wrap_keyed_entries,
 )

@@ -1,4 +1,4 @@
-"""Tiferet-Ly Keyed Catalogue Entry Helpers"""
+"""Tiferet-Ly Mapper Core Helpers"""
 
 # *** imports
 

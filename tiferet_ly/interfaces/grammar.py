@@ -7,7 +7,7 @@ from abc import abstractmethod
 from typing import List, Optional
 
 # ** app
-from tiferet.interfaces.core import Service
+from tiferet import Service
 from ..mappers.grammar import GrammarAggregate
 
 # *** interfaces
