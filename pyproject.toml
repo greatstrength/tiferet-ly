@@ -29,6 +29,9 @@ where = ["."]
 include = [
     "tiferet_ly",
     "tiferet_ly.domain",
+    "tiferet_ly.mappers",
+    "tiferet_ly.interfaces",
+    "tiferet_ly.repos",
 ]
 
 [tool.setuptools.dynamic]
