@@ -9,31 +9,69 @@ from typing import Any, ClassVar, Dict, Optional, Union
 from pydantic import Field
 
 # ** app
-from tiferet import (
-    Aggregate,
-    TransferObject,
-)
+from tiferet import TransferObject
 from ..domain.production import (
     ComplexProductionRule,
     ProductionRule,
     SimpleProductionRule,
 )
+from .core import NamedRuleAggregate
 
 # *** mappers
 
 # ** mapper: production_rule_aggregate
-class ProductionRuleAggregate(ProductionRule, Aggregate):
+class ProductionRuleAggregate(ProductionRule, NamedRuleAggregate):
     '''
-    Mutable aggregate for a production rule.
+    Mutable aggregate base for a production rule.
 
-    Carries no domain-specific mutators beyond the inherited
-    ``set_attribute`` / ``to_dict`` surface; nothing in the current
-    roadmap edits a loaded rule in place. Concrete simple/complex field
-    sets live on the domain variants produced by
-    :meth:`ProductionRuleConfigObject.map`.
+    Shared name/grammar mutators come from :class:`NamedRuleAggregate`.
+    ``set_spec`` is shared by both variants; ``set_action`` lives only
+    on :class:`ComplexProductionRuleAggregate`.
+    '''
+
+    # * method: set_spec
+    def set_spec(self, spec: str) -> None:
+        '''
+        Set the grammar-pattern string.
+
+        :param spec: The new grammar-pattern string.
+        :type spec: str
+        :return: None
+        :rtype: None
+        '''
+
+        # Update the spec; validate_assignment=True handles re-validation.
+        self.spec = spec
+
+
+# ** mapper: simple_production_rule_aggregate
+class SimpleProductionRuleAggregate(SimpleProductionRule, ProductionRuleAggregate):
+    '''
+    Mutable aggregate for a simple production rule.
     '''
 
     pass
+
+
+# ** mapper: complex_production_rule_aggregate
+class ComplexProductionRuleAggregate(ComplexProductionRule, ProductionRuleAggregate):
+    '''
+    Mutable aggregate for a complex production rule.
+    '''
+
+    # * method: set_action
+    def set_action(self, action: str) -> None:
+        '''
+        Set the encoded source fragment that runs when the production matches.
+
+        :param action: The new action source fragment.
+        :type action: str
+        :return: None
+        :rtype: None
+        '''
+
+        # Update the action; validate_assignment=True handles re-validation.
+        self.action = action
 
 
 # ** mapper: production_rule_config_object
@@ -82,18 +120,18 @@ class ProductionRuleConfigObject(TransferObject):
     )
 
     # * method: map
-    def map(self, **overrides) -> Union[SimpleProductionRule, ComplexProductionRule]:
+    def map(self, **overrides) -> Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]:
         '''
-        Map the production rule configuration data to a domain production rule.
+        Map the production rule configuration data to a production rule aggregate.
 
         Branches on ``action``'s presence: a set action yields
-        :class:`ComplexProductionRule`, otherwise
-        :class:`SimpleProductionRule`.
+        :class:`ComplexProductionRuleAggregate`, otherwise
+        :class:`SimpleProductionRuleAggregate`.
 
         :param overrides: Additional field overrides.
         :type overrides: dict
-        :return: The mapped simple or complex production rule.
-        :rtype: Union[SimpleProductionRule, ComplexProductionRule]
+        :return: The mapped simple or complex production rule aggregate.
+        :rtype: Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]
         '''
 
         # Serialize via the to_model role without dropping None fields so
@@ -101,17 +139,17 @@ class ProductionRuleConfigObject(TransferObject):
         data = self.to_primitive(role='to_model', exclude_none=False)
         data.update(overrides)
 
-        # Construct the complex variant when an action is present.
+        # Construct the complex aggregate when an action is present.
         if data.get('action') is not None:
-            return ComplexProductionRule(
+            return ComplexProductionRuleAggregate(
                 name=data['name'],
                 grammar_id=data['grammar_id'],
                 spec=data['spec'],
                 action=data['action'],
             )
 
-        # Construct the simple variant otherwise (drop action if absent/None).
-        return SimpleProductionRule(
+        # Construct the simple aggregate otherwise (drop action if absent/None).
+        return SimpleProductionRuleAggregate(
             name=data['name'],
             grammar_id=data['grammar_id'],
             spec=data['spec'],
@@ -123,7 +161,7 @@ class ProductionRuleConfigObject(TransferObject):
         '''
         Create a ProductionRuleConfigObject from a production rule model or aggregate.
 
-        :param production: The production rule domain object.
+        :param production: The production rule domain object or aggregate.
         :type production: ProductionRule
         :param overrides: Additional field overrides.
         :type overrides: dict

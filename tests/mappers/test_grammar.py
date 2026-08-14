@@ -31,6 +31,8 @@ def test_grammar_aggregate_and_config_object_exist() -> None:
 
     # Assert inherited mutators and roles are present.
     assert 'set_attribute' in dir(GrammarAggregate)
+    assert 'set_start' in dir(GrammarAggregate)
+    assert 'set_parent_ids' in dir(GrammarAggregate)
     assert 'to_model' in GrammarConfigObject._ROLES
     assert 'to_data' in GrammarConfigObject._ROLES
 
@@ -84,3 +86,17 @@ def test_grammar_map_raises_same_domain_error_on_corrupted_invariant() -> None:
 
     # Both failures are ValidationError (mapper adds no validation of its own).
     assert type(map_error.value) is type(domain_error.value)
+
+
+# ** test: grammar_aggregate_mutations
+def test_grammar_aggregate_mutations() -> None:
+    '''
+    Test start and parent_ids mutators on GrammarAggregate.
+    '''
+
+    # Mutate start and parent composition.
+    grammar = GrammarAggregate(id='core', parent_ids=[], start='module')
+    grammar.set_start('expression')
+    grammar.set_parent_ids(['base', 'extra'])
+    assert grammar.start == 'expression'
+    assert grammar.parent_ids == ['base', 'extra']

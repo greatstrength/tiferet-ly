@@ -12,11 +12,10 @@ from ..mappers.core import (
     expand_keyed_entries,
     wrap_keyed_entries,
 )
-from ..mappers.token import TokenRuleConfigObject
-from ..domain.token import (
-    ComplexTokenRule,
-    SimpleTokenRule,
-    TokenRule,
+from ..mappers.token import (
+    ComplexTokenRuleAggregate,
+    SimpleTokenRuleAggregate,
+    TokenRuleConfigObject,
 )
 
 # *** repos
@@ -105,16 +104,16 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         return self._find_index(entries, name, grammar_id) is not None
 
     # * method: get
-    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleTokenRule, ComplexTokenRule]]:
+    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]:
         '''
-        Retrieve a token rule by name and grammar_id.
+        Retrieve a token rule aggregate by name and grammar_id.
 
         :param name: The token rule name.
         :type name: str
         :param grammar_id: The grammar the rule is declared under.
         :type grammar_id: str
-        :return: The token rule, or None if not found.
-        :rtype: Optional[Union[SimpleTokenRule, ComplexTokenRule]]
+        :return: The token rule aggregate, or None if not found.
+        :rtype: Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]
         '''
 
         # Load expanded entries and locate the composite key.
@@ -125,19 +124,19 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         if index is None:
             return None
 
-        # Map the matching entry to a domain token rule.
+        # Map the matching entry to a token rule aggregate.
         return TokenRuleConfigObject.model_validate(entries[index]).map()
 
     # * method: list
-    def list(self) -> List[Union[SimpleTokenRule, ComplexTokenRule]]:
+    def list(self) -> List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]:
         '''
-        List every token rule unfiltered, in declared order.
+        List every token rule aggregate unfiltered, in declared order.
 
-        :return: All stored token rules.
-        :rtype: List[Union[SimpleTokenRule, ComplexTokenRule]]
+        :return: All stored token rule aggregates.
+        :rtype: List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]
         '''
 
-        # Load expanded entries and map each to a domain token rule.
+        # Load expanded entries and map each to a token rule aggregate.
         entries = self._load_entries()
         return [
             TokenRuleConfigObject.model_validate(entry).map()
@@ -145,20 +144,20 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         ]
 
     # * method: save
-    def save(self, token: TokenRule) -> None:
+    def save(self, token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]) -> None:
         '''
-        Persist a token rule.
+        Persist a token rule aggregate.
 
         Replaces an existing ``(name, grammar_id)`` entry in its original
         list position; otherwise appends at the end.
 
-        :param token: The token rule to persist.
-        :type token: TokenRule
+        :param token: The token rule aggregate to persist.
+        :type token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
         :return: None
         :rtype: None
         '''
 
-        # Convert the token rule to a flat config dict.
+        # Convert the aggregate to a flat config dict.
         token_data = TokenRuleConfigObject.from_model(token).to_primitive(
             self.default_role,
             exclude=set(),

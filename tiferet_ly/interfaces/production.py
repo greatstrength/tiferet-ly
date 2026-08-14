@@ -8,9 +8,9 @@ from typing import List, Optional, Union
 
 # ** app
 from tiferet import Service
-from ..domain.production import (
-    ComplexProductionRule,
-    SimpleProductionRule,
+from ..mappers.production import (
+    ComplexProductionRuleAggregate,
+    SimpleProductionRuleAggregate,
 )
 
 # *** interfaces
@@ -42,41 +42,41 @@ class ProductionService(Service):
 
     # * method: get
     @abstractmethod
-    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleProductionRule, ComplexProductionRule]]:
+    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]:
         '''
-        Retrieve a production rule by name and grammar_id.
+        Retrieve a production rule aggregate by name and grammar_id.
 
         :param name: The production rule name.
         :type name: str
         :param grammar_id: The grammar the rule is declared under.
         :type grammar_id: str
-        :return: The production rule, or None if not found.
-        :rtype: Optional[Union[SimpleProductionRule, ComplexProductionRule]]
+        :return: The production rule aggregate, or None if not found.
+        :rtype: Optional[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]
         '''
         # Not implemented.
         raise NotImplementedError('get method is required for ProductionService.')
 
     # * method: list
     @abstractmethod
-    def list(self) -> List[Union[SimpleProductionRule, ComplexProductionRule]]:
+    def list(self) -> List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]:
         '''
-        List every production rule unfiltered, in declared order.
+        List every production rule aggregate unfiltered, in declared order.
 
-        :return: All stored production rules.
-        :rtype: List[Union[SimpleProductionRule, ComplexProductionRule]]
+        :return: All stored production rule aggregates.
+        :rtype: List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]
         '''
         # Not implemented.
         raise NotImplementedError('list method is required for ProductionService.')
 
     # * method: save
     @abstractmethod
-    def save(self, production: Union[SimpleProductionRule, ComplexProductionRule]) -> None:
+    def save(self, production: Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]) -> None:
         '''
-        Persist a production rule, replacing an existing ``(name, grammar_id)``
-        entry in place or appending when absent.
+        Persist a production rule aggregate, replacing an existing
+        ``(name, grammar_id)`` entry in place or appending when absent.
 
-        :param production: The production rule to persist.
-        :type production: Union[SimpleProductionRule, ComplexProductionRule]
+        :param production: The production rule aggregate to persist.
+        :type production: Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]
         :return: None
         :rtype: None
         '''

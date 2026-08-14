@@ -1,9 +1,12 @@
-"""Tiferet-Ly Mapper Core Helpers"""
+"""Tiferet-Ly Mapper Core Helpers and Aggregate Bases"""
 
 # *** imports
 
 # ** core
 from typing import Any, Dict, List
+
+# ** app
+from tiferet import Aggregate
 
 # *** functions
 
@@ -68,3 +71,44 @@ def wrap_keyed_entries(entries: List[Dict[str, Any]], key_field: str = 'name') -
 
     # Return the wrapped entries.
     return wrapped
+
+
+# *** classes
+
+# ** class: named_rule_aggregate
+class NamedRuleAggregate(Aggregate):
+    '''
+    Shared aggregate extension for name + grammar_id rule roots.
+
+    Houses the mutators domain events will call when renaming a rule or
+    reassigning it to another grammar. Concrete Simple/Complex rule
+    aggregates mix this in with their domain variant.
+    '''
+
+    # * method: rename
+    def rename(self, name: str) -> None:
+        '''
+        Rename the rule.
+
+        :param name: The new bare rule name.
+        :type name: str
+        :return: None
+        :rtype: None
+        '''
+
+        # Update the name; validate_assignment=True handles re-validation.
+        self.name = name
+
+    # * method: reassign_grammar
+    def reassign_grammar(self, grammar_id: str) -> None:
+        '''
+        Reassign the rule to a different owning grammar.
+
+        :param grammar_id: The id of the grammar this rule should be declared under.
+        :type grammar_id: str
+        :return: None
+        :rtype: None
+        '''
+
+        # Update the owning grammar id.
+        self.grammar_id = grammar_id

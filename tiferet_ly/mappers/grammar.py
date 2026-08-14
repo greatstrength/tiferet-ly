@@ -3,7 +3,7 @@
 # *** imports
 
 # ** core
-from typing import Any, ClassVar, Dict
+from typing import Any, ClassVar, Dict, List
 
 # ** app
 from tiferet import (
@@ -19,11 +19,37 @@ class GrammarAggregate(Grammar, Aggregate):
     '''
     Mutable aggregate for a Grammar.
 
-    Carries no domain-specific mutators beyond the inherited
-    ``set_attribute`` / ``to_dict`` surface.
+    Mutators mirror the operations domain events will call when updating
+    a grammar's identity structure (start symbol and parent composition).
     '''
 
-    pass
+    # * method: set_start
+    def set_start(self, start: str) -> None:
+        '''
+        Set the start symbol.
+
+        :param start: The new start symbol name.
+        :type start: str
+        :return: None
+        :rtype: None
+        '''
+
+        # Update the start symbol; validate_assignment=True handles re-validation.
+        self.start = start
+
+    # * method: set_parent_ids
+    def set_parent_ids(self, parent_ids: List[str]) -> None:
+        '''
+        Replace the ordered parent grammar ids.
+
+        :param parent_ids: The new ordered parent ids list.
+        :type parent_ids: List[str]
+        :return: None
+        :rtype: None
+        '''
+
+        # Replace the parent ids list in full.
+        self.parent_ids = list(parent_ids)
 
 
 # ** mapper: grammar_config_object

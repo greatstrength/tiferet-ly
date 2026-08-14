@@ -10,37 +10,36 @@ import pytest
 from pydantic import ValidationError
 
 # ** app
-from tiferet_ly.domain.production import (
-    ComplexProductionRule,
-    SimpleProductionRule,
-)
+from tiferet_ly.domain.production import SimpleProductionRule
 from tiferet_ly.mappers.core import (
     expand_keyed_entries,
     wrap_keyed_entries,
 )
 from tiferet_ly.mappers.production import (
+    ComplexProductionRuleAggregate,
     ProductionRuleAggregate,
     ProductionRuleConfigObject,
+    SimpleProductionRuleAggregate,
 )
 
 # *** constants
 
 # ** constant: simple_core
-SIMPLE_CORE = SimpleProductionRule(
+SIMPLE_CORE = SimpleProductionRuleAggregate(
     name='expression',
     grammar_id='core',
     spec='expression : term',
 )
 
 # ** constant: simple_domain_extra
-SIMPLE_DOMAIN_EXTRA = SimpleProductionRule(
+SIMPLE_DOMAIN_EXTRA = SimpleProductionRuleAggregate(
     name='expression',
     grammar_id='domain_extra',
     spec='expression : attr_decl',
 )
 
 # ** constant: complex_core
-COMPLEX_CORE = ComplexProductionRule(
+COMPLEX_CORE = ComplexProductionRuleAggregate(
     name='expression',
     grammar_id='core',
     spec='expression : expression PLUS term',
@@ -93,7 +92,9 @@ def test_production_rule_aggregate_exists() -> None:
     Test that ProductionRuleAggregate exists with Aggregate mutators.
     '''
 
-    # Assert the named artifact exposes inherited mutators.
+    # Assert the named artifact exposes shared NamedRuleAggregate mutators.
+    assert 'rename' in dir(ProductionRuleAggregate)
+    assert 'reassign_grammar' in dir(ProductionRuleAggregate)
     assert 'set_attribute' in dir(ProductionRuleAggregate)
 
 
@@ -184,3 +185,35 @@ def test_production_map_raises_same_domain_error_on_corrupted_invariant() -> Non
 
     # Both failures are ValidationError (mapper adds no validation of its own).
     assert type(map_error.value) is type(domain_error.value)
+
+
+# ** test: production_rule_aggregate_mutations
+def test_production_rule_aggregate_mutations() -> None:
+    '''
+    Test shared and variant-specific mutators on production rule aggregates.
+    '''
+
+    # Rename and reassign via the shared NamedRuleAggregate surface.
+    simple = SimpleProductionRuleAggregate(
+        name='expression',
+        grammar_id='core',
+        spec='expression : term',
+    )
+    simple.rename('expr')
+    simple.reassign_grammar('domain_extra')
+    simple.set_spec('expr : term')
+    assert simple.name == 'expr'
+    assert simple.grammar_id == 'domain_extra'
+    assert simple.spec == 'expr : term'
+
+    # Complex rules also expose set_action.
+    complex_rule = ComplexProductionRuleAggregate(
+        name='expression',
+        grammar_id='core',
+        spec='expression : expression PLUS term',
+        action='p[0] = p[1]',
+    )
+    complex_rule.set_action('p[0] = p[1] + p[3]')
+    assert complex_rule.action == 'p[0] = p[1] + p[3]'
+    assert isinstance(simple, ProductionRuleAggregate)
+    assert isinstance(complex_rule, ProductionRuleAggregate)

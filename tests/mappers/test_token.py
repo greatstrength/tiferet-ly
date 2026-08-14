@@ -10,15 +10,14 @@ import pytest
 from pydantic import ValidationError
 
 # ** app
-from tiferet_ly.domain.token import (
-    ComplexTokenRule,
-    SimpleTokenRule,
-)
+from tiferet_ly.domain.token import SimpleTokenRule
 from tiferet_ly.mappers.core import (
     expand_keyed_entries,
     wrap_keyed_entries,
 )
 from tiferet_ly.mappers.token import (
+    ComplexTokenRuleAggregate,
+    SimpleTokenRuleAggregate,
     TokenRuleAggregate,
     TokenRuleConfigObject,
 )
@@ -26,21 +25,21 @@ from tiferet_ly.mappers.token import (
 # *** constants
 
 # ** constant: simple_core
-SIMPLE_CORE = SimpleTokenRule(
+SIMPLE_CORE = SimpleTokenRuleAggregate(
     name='PLUS',
     grammar_id='core',
     pattern=r'\+',
 )
 
 # ** constant: simple_domain_extra
-SIMPLE_DOMAIN_EXTRA = SimpleTokenRule(
+SIMPLE_DOMAIN_EXTRA = SimpleTokenRuleAggregate(
     name='PLUS',
     grammar_id='domain_extra',
     pattern=r'\+\+',
 )
 
 # ** constant: complex_core
-COMPLEX_CORE = ComplexTokenRule(
+COMPLEX_CORE = ComplexTokenRuleAggregate(
     name='NUMBER',
     grammar_id='core',
     pattern=r'\d+',
@@ -93,8 +92,9 @@ def test_token_rule_aggregate_exists() -> None:
     Test that TokenRuleAggregate is a TokenRule Aggregate subclass.
     '''
 
-    # Assert the named artifact exists with the expected bases.
-    assert issubclass(TokenRuleAggregate, TokenRuleAggregate)
+    # Assert the named artifact exposes shared NamedRuleAggregate mutators.
+    assert 'rename' in dir(TokenRuleAggregate)
+    assert 'reassign_grammar' in dir(TokenRuleAggregate)
     assert 'set_attribute' in dir(TokenRuleAggregate)
 
 
@@ -185,3 +185,31 @@ def test_token_map_raises_same_domain_error_on_corrupted_invariant() -> None:
 
     # Both failures are ValidationError (mapper adds no validation of its own).
     assert type(map_error.value) is type(domain_error.value)
+
+
+# ** test: token_rule_aggregate_mutations
+def test_token_rule_aggregate_mutations() -> None:
+    '''
+    Test shared and variant-specific mutators on token rule aggregates.
+    '''
+
+    # Rename and reassign via the shared NamedRuleAggregate surface.
+    simple = SimpleTokenRuleAggregate(name='PLUS', grammar_id='core', pattern=r'\+')
+    simple.rename('ADD')
+    simple.reassign_grammar('domain_extra')
+    simple.set_pattern(r'\+\+')
+    assert simple.name == 'ADD'
+    assert simple.grammar_id == 'domain_extra'
+    assert simple.pattern == r'\+\+'
+
+    # Complex rules also expose set_action.
+    complex_rule = ComplexTokenRuleAggregate(
+        name='NUMBER',
+        grammar_id='core',
+        pattern=r'\d+',
+        action='return t',
+    )
+    complex_rule.set_action('t.value = int(t.value)\nreturn t')
+    assert complex_rule.action == 't.value = int(t.value)\nreturn t'
+    assert isinstance(simple, TokenRuleAggregate)
+    assert isinstance(complex_rule, TokenRuleAggregate)

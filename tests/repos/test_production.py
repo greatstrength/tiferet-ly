@@ -11,9 +11,9 @@ import pytest
 import yaml
 
 # ** app
-from tiferet_ly.domain.production import (
-    ComplexProductionRule,
-    SimpleProductionRule,
+from tiferet_ly.mappers.production import (
+    ComplexProductionRuleAggregate,
+    SimpleProductionRuleAggregate,
 )
 from tiferet_ly.repos.production import ProductionConfigRepository
 
@@ -67,18 +67,18 @@ def test_int_production_repo_crud_five_methods(
     # Save simple and complex rules under distinct composite keys.
     # Repository identity is (name, grammar_id); alternatives that share
     # both are outside this repository's keying model.
-    complex_rule = ComplexProductionRule(
+    complex_rule = ComplexProductionRuleAggregate(
         name='expression',
         grammar_id='core',
         spec='expression : expression PLUS term',
         action='p[0] = p[1] + p[3]',
     )
-    simple = SimpleProductionRule(
+    simple = SimpleProductionRuleAggregate(
         name='term',
         grammar_id='core',
         spec='term : NUMBER',
     )
-    other = SimpleProductionRule(
+    other = SimpleProductionRuleAggregate(
         name='expression',
         grammar_id='domain_extra',
         spec='expression : attr_decl',
@@ -92,10 +92,10 @@ def test_int_production_repo_crud_five_methods(
     assert production_repo.exists('expression', 'domain_extra') is True
     assert production_repo.exists('term', 'core') is True
     loaded = production_repo.get('expression', 'core')
-    assert isinstance(loaded, ComplexProductionRule)
+    assert isinstance(loaded, ComplexProductionRuleAggregate)
     assert loaded.action == 'p[0] = p[1] + p[3]'
     loaded_simple = production_repo.get('term', 'core')
-    assert isinstance(loaded_simple, SimpleProductionRule)
+    assert isinstance(loaded_simple, SimpleProductionRuleAggregate)
     assert loaded_simple.spec == 'term : NUMBER'
 
     # list returns every entry unfiltered in declared order.
@@ -123,15 +123,15 @@ def test_int_production_repo_order_preservation_across_grammar_ids(
 
     # Declare in deliberately non-alphabetical order across grammar_ids.
     declared = [
-        ComplexProductionRule(
+        ComplexProductionRuleAggregate(
             name='zeta',
             grammar_id='core',
             spec='zeta : ZETA',
             action='p[0] = p[1]',
         ),
-        SimpleProductionRule(name='expression', grammar_id='core', spec='expression : term'),
-        SimpleProductionRule(name='attr_decl', grammar_id='domain_extra', spec='attr_decl : COLON'),
-        SimpleProductionRule(name='expression', grammar_id='domain_extra', spec='expression : attr_decl'),
+        SimpleProductionRuleAggregate(name='expression', grammar_id='core', spec='expression : term'),
+        SimpleProductionRuleAggregate(name='attr_decl', grammar_id='domain_extra', spec='attr_decl : COLON'),
+        SimpleProductionRuleAggregate(name='expression', grammar_id='domain_extra', spec='expression : attr_decl'),
     ]
     for rule in declared:
         production_repo.save(rule)
@@ -153,15 +153,15 @@ def test_int_production_repo_save_replaces_in_place(
     '''
 
     # Declare three rules with distinct names so composite keys differ.
-    first = SimpleProductionRule(name='A', grammar_id='core', spec='A : a')
-    middle = SimpleProductionRule(name='B', grammar_id='core', spec='B : b')
-    last = SimpleProductionRule(name='C', grammar_id='core', spec='C : c')
+    first = SimpleProductionRuleAggregate(name='A', grammar_id='core', spec='A : a')
+    middle = SimpleProductionRuleAggregate(name='B', grammar_id='core', spec='B : b')
+    last = SimpleProductionRuleAggregate(name='C', grammar_id='core', spec='C : c')
     production_repo.save(first)
     production_repo.save(middle)
     production_repo.save(last)
 
     # Update the middle rule's spec.
-    updated = SimpleProductionRule(name='B', grammar_id='core', spec='B : B_UPDATED')
+    updated = SimpleProductionRuleAggregate(name='B', grammar_id='core', spec='B : B_UPDATED')
     production_repo.save(updated)
 
     # Position is unchanged and fields reflect the update.
@@ -180,13 +180,13 @@ def test_int_production_repo_serialized_yaml_shape(
     '''
 
     # Save one complex and one simple rule under distinct composite keys.
-    production_repo.save(ComplexProductionRule(
+    production_repo.save(ComplexProductionRuleAggregate(
         name='expression',
         grammar_id='core',
         spec='expression : expression PLUS term',
         action='p[0] = p[1] + p[3]',
     ))
-    production_repo.save(SimpleProductionRule(
+    production_repo.save(SimpleProductionRuleAggregate(
         name='term',
         grammar_id='core',
         spec='term : NUMBER',

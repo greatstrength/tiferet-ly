@@ -12,11 +12,10 @@ from ..mappers.core import (
     expand_keyed_entries,
     wrap_keyed_entries,
 )
-from ..mappers.production import ProductionRuleConfigObject
-from ..domain.production import (
-    ComplexProductionRule,
-    ProductionRule,
-    SimpleProductionRule,
+from ..mappers.production import (
+    ComplexProductionRuleAggregate,
+    ProductionRuleConfigObject,
+    SimpleProductionRuleAggregate,
 )
 
 # *** repos
@@ -105,16 +104,16 @@ class ProductionConfigRepository(ProductionService, ConfigurationRepository):
         return self._find_index(entries, name, grammar_id) is not None
 
     # * method: get
-    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleProductionRule, ComplexProductionRule]]:
+    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]:
         '''
-        Retrieve a production rule by name and grammar_id.
+        Retrieve a production rule aggregate by name and grammar_id.
 
         :param name: The production rule name.
         :type name: str
         :param grammar_id: The grammar the rule is declared under.
         :type grammar_id: str
-        :return: The production rule, or None if not found.
-        :rtype: Optional[Union[SimpleProductionRule, ComplexProductionRule]]
+        :return: The production rule aggregate, or None if not found.
+        :rtype: Optional[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]
         '''
 
         # Load expanded entries and locate the composite key.
@@ -125,19 +124,19 @@ class ProductionConfigRepository(ProductionService, ConfigurationRepository):
         if index is None:
             return None
 
-        # Map the matching entry to a domain production rule.
+        # Map the matching entry to a production rule aggregate.
         return ProductionRuleConfigObject.model_validate(entries[index]).map()
 
     # * method: list
-    def list(self) -> List[Union[SimpleProductionRule, ComplexProductionRule]]:
+    def list(self) -> List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]:
         '''
-        List every production rule unfiltered, in declared order.
+        List every production rule aggregate unfiltered, in declared order.
 
-        :return: All stored production rules.
-        :rtype: List[Union[SimpleProductionRule, ComplexProductionRule]]
+        :return: All stored production rule aggregates.
+        :rtype: List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]
         '''
 
-        # Load expanded entries and map each to a domain production rule.
+        # Load expanded entries and map each to a production rule aggregate.
         entries = self._load_entries()
         return [
             ProductionRuleConfigObject.model_validate(entry).map()
@@ -145,20 +144,20 @@ class ProductionConfigRepository(ProductionService, ConfigurationRepository):
         ]
 
     # * method: save
-    def save(self, production: ProductionRule) -> None:
+    def save(self, production: Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]) -> None:
         '''
-        Persist a production rule.
+        Persist a production rule aggregate.
 
         Replaces an existing ``(name, grammar_id)`` entry in its original
         list position; otherwise appends at the end.
 
-        :param production: The production rule to persist.
-        :type production: ProductionRule
+        :param production: The production rule aggregate to persist.
+        :type production: Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]
         :return: None
         :rtype: None
         '''
 
-        # Convert the production rule to a flat config dict.
+        # Convert the aggregate to a flat config dict.
         production_data = ProductionRuleConfigObject.from_model(production).to_primitive(
             self.default_role,
             exclude=set(),

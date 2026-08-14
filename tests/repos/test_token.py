@@ -11,9 +11,9 @@ import pytest
 import yaml
 
 # ** app
-from tiferet_ly.domain.token import (
-    ComplexTokenRule,
-    SimpleTokenRule,
+from tiferet_ly.mappers.token import (
+    ComplexTokenRuleAggregate,
+    SimpleTokenRuleAggregate,
 )
 from tiferet_ly.repos.token import TokenConfigRepository
 
@@ -63,14 +63,14 @@ def test_int_token_repo_crud_five_methods(token_repo: TokenConfigRepository) -> 
     '''
 
     # Save a simple and a complex rule under different grammar_ids.
-    simple = SimpleTokenRule(name='PLUS', grammar_id='core', pattern=r'\+')
-    complex_rule = ComplexTokenRule(
+    simple = SimpleTokenRuleAggregate(name='PLUS', grammar_id='core', pattern=r'\+')
+    complex_rule = ComplexTokenRuleAggregate(
         name='NUMBER',
         grammar_id='core',
         pattern=r'\d+',
         action='t.value = int(t.value)\nreturn t',
     )
-    other_plus = SimpleTokenRule(name='PLUS', grammar_id='domain_extra', pattern=r'\+\+')
+    other_plus = SimpleTokenRuleAggregate(name='PLUS', grammar_id='domain_extra', pattern=r'\+\+')
     token_repo.save(simple)
     token_repo.save(complex_rule)
     token_repo.save(other_plus)
@@ -80,10 +80,10 @@ def test_int_token_repo_crud_five_methods(token_repo: TokenConfigRepository) -> 
     assert token_repo.exists('PLUS', 'domain_extra') is True
     assert token_repo.exists('NUMBER', 'core') is True
     loaded = token_repo.get('PLUS', 'core')
-    assert isinstance(loaded, SimpleTokenRule)
+    assert isinstance(loaded, SimpleTokenRuleAggregate)
     assert loaded.pattern == r'\+'
     loaded_complex = token_repo.get('NUMBER', 'core')
-    assert isinstance(loaded_complex, ComplexTokenRule)
+    assert isinstance(loaded_complex, ComplexTokenRuleAggregate)
     assert loaded_complex.action == 't.value = int(t.value)\nreturn t'
 
     # list returns every entry unfiltered in declared order.
@@ -112,16 +112,16 @@ def test_int_token_repo_order_preservation_across_grammar_ids(
 
     # Declare in deliberately non-alphabetical order across grammar_ids.
     declared = [
-        SimpleTokenRule(name='ZETA', grammar_id='core', pattern='z'),
-        SimpleTokenRule(name='PLUS', grammar_id='core', pattern=r'\+'),
-        ComplexTokenRule(
+        SimpleTokenRuleAggregate(name='ZETA', grammar_id='core', pattern='z'),
+        SimpleTokenRuleAggregate(name='PLUS', grammar_id='core', pattern=r'\+'),
+        ComplexTokenRuleAggregate(
             name='NUMBER',
             grammar_id='core',
             pattern=r'\d+',
             action='t.value = int(t.value)\nreturn t',
         ),
-        SimpleTokenRule(name='COLON', grammar_id='domain_extra', pattern=':'),
-        SimpleTokenRule(name='PLUS', grammar_id='domain_extra', pattern=r'\+\+'),
+        SimpleTokenRuleAggregate(name='COLON', grammar_id='domain_extra', pattern=':'),
+        SimpleTokenRuleAggregate(name='PLUS', grammar_id='domain_extra', pattern=r'\+\+'),
     ]
     for rule in declared:
         token_repo.save(rule)
@@ -141,15 +141,15 @@ def test_int_token_repo_save_replaces_in_place(token_repo: TokenConfigRepository
     '''
 
     # Declare three rules.
-    first = SimpleTokenRule(name='A', grammar_id='core', pattern='a')
-    middle = SimpleTokenRule(name='B', grammar_id='core', pattern='b')
-    last = SimpleTokenRule(name='C', grammar_id='core', pattern='c')
+    first = SimpleTokenRuleAggregate(name='A', grammar_id='core', pattern='a')
+    middle = SimpleTokenRuleAggregate(name='B', grammar_id='core', pattern='b')
+    last = SimpleTokenRuleAggregate(name='C', grammar_id='core', pattern='c')
     token_repo.save(first)
     token_repo.save(middle)
     token_repo.save(last)
 
     # Update the middle rule's pattern.
-    updated = SimpleTokenRule(name='B', grammar_id='core', pattern='B_UPDATED')
+    updated = SimpleTokenRuleAggregate(name='B', grammar_id='core', pattern='B_UPDATED')
     token_repo.save(updated)
 
     # Position is unchanged and fields reflect the update.
@@ -166,8 +166,8 @@ def test_int_token_repo_serialized_yaml_shape(token_repo: TokenConfigRepository)
     '''
 
     # Save one simple and one complex rule.
-    token_repo.save(SimpleTokenRule(name='PLUS', grammar_id='core', pattern=r'\+'))
-    token_repo.save(ComplexTokenRule(
+    token_repo.save(SimpleTokenRuleAggregate(name='PLUS', grammar_id='core', pattern=r'\+'))
+    token_repo.save(ComplexTokenRuleAggregate(
         name='NUMBER',
         grammar_id='core',
         pattern=r'\d+',
