@@ -10,6 +10,71 @@ from ..mappers.grammar import GrammarAggregate
 from ..mappers.production import ProductionRuleAggregate
 from ..mappers.token import TokenRuleAggregate
 
+# *** functions
+
+# ** function: grammar_index
+def grammar_index(grammars: List[GrammarAggregate]) -> Dict[str, GrammarAggregate]:
+    '''
+    Index grammars by id for ancestor lookup.
+
+    :param grammars: The full grammar catalogue.
+    :type grammars: List[GrammarAggregate]
+    :return: Grammars keyed by id.
+    :rtype: Dict[str, GrammarAggregate]
+    '''
+
+    # Index each grammar by its own id.
+    return {grammar.id: grammar for grammar in grammars}
+
+# ** function: walk_ancestry
+def walk_ancestry(
+        grammar: GrammarAggregate,
+        grammars: List[GrammarAggregate]) -> List[str]:
+    '''
+    Resolve a grammar's ancestor ids, most fundamental first.
+
+    :param grammar: The target grammar whose ancestry is walked.
+    :type grammar: GrammarAggregate
+    :param grammars: The catalogue used to resolve ancestor parent_ids.
+    :type grammars: List[GrammarAggregate]
+    :return: Ancestor ids with the target id last.
+    :rtype: List[str]
+    '''
+
+    # Index the catalogue; the target itself is never looked up by id.
+    by_id = grammar_index(grammars)
+    recorded = []
+    visited = set()
+
+    # Record each reachable ancestor the first time it is visited.
+    def visit(grammar_id: str) -> None:
+
+        # Skip already-visited ids so diamonds stay stable and cycles terminate.
+        if grammar_id in visited:
+            return
+
+        # Treat an unresolvable parent as a dead end.
+        resolved = by_id.get(grammar_id)
+        if resolved is None:
+            return
+
+        # Record on first visit, then walk this grammar's parents last-first.
+        visited.add(grammar_id)
+        recorded.append(grammar_id)
+        for parent_id in reversed(resolved.parent_ids):
+            visit(parent_id)
+
+    # Walk the target's parents in reverse declared order.
+    for parent_id in reversed(grammar.parent_ids):
+        visit(parent_id)
+
+    # Reverse so the most-fundamental ancestor is first, then append the target.
+    recorded.reverse()
+    recorded.append(grammar.id)
+
+    # Return the resolved ancestor id list.
+    return recorded
+
 # *** utils
 
 # ** util: grammar_rule_selector
@@ -19,71 +84,6 @@ class GrammarRuleSelector:
     flat catalogue so a reader can consume a single ordered list without
     re-deriving DAG precedence itself.
     '''
-
-    # * method: _grammar_index (static)
-    @staticmethod
-    def _grammar_index(grammars: List[GrammarAggregate]) -> Dict[str, GrammarAggregate]:
-        '''
-        Index grammars by id for ancestor lookup.
-
-        :param grammars: The full grammar catalogue.
-        :type grammars: List[GrammarAggregate]
-        :return: Grammars keyed by id.
-        :rtype: Dict[str, GrammarAggregate]
-        '''
-
-        # Index each grammar by its own id.
-        return {grammar.id: grammar for grammar in grammars}
-
-    # * method: _walk_ancestry (static)
-    @staticmethod
-    def _walk_ancestry(
-            grammar: GrammarAggregate,
-            grammars: List[GrammarAggregate]) -> List[str]:
-        '''
-        Resolve a grammar's ancestor ids, most fundamental first.
-
-        :param grammar: The target grammar whose ancestry is walked.
-        :type grammar: GrammarAggregate
-        :param grammars: The catalogue used to resolve ancestor parent_ids.
-        :type grammars: List[GrammarAggregate]
-        :return: Ancestor ids with the target id last.
-        :rtype: List[str]
-        '''
-
-        # Index the catalogue; the target itself is never looked up by id.
-        by_id = GrammarRuleSelector._grammar_index(grammars)
-        recorded = []
-        visited = set()
-
-        # Record each reachable ancestor the first time it is visited.
-        def visit(grammar_id: str) -> None:
-
-            # Skip already-visited ids so diamonds stay stable and cycles terminate.
-            if grammar_id in visited:
-                return
-
-            # Treat an unresolvable parent as a dead end.
-            resolved = by_id.get(grammar_id)
-            if resolved is None:
-                return
-
-            # Record on first visit, then walk this grammar's parents last-first.
-            visited.add(grammar_id)
-            recorded.append(grammar_id)
-            for parent_id in reversed(resolved.parent_ids):
-                visit(parent_id)
-
-        # Walk the target's parents in reverse declared order.
-        for parent_id in reversed(grammar.parent_ids):
-            visit(parent_id)
-
-        # Reverse so the most-fundamental ancestor is first, then append the target.
-        recorded.reverse()
-        recorded.append(grammar.id)
-
-        # Return the resolved ancestor id list.
-        return recorded
 
     # * method: select_tokens (static)
     @staticmethod
@@ -105,7 +105,7 @@ class GrammarRuleSelector:
         '''
 
         # Resolve ancestry and keep only tokens declared under those grammars.
-        ancestor_ids = GrammarRuleSelector._walk_ancestry(grammar, grammars)
+        ancestor_ids = walk_ancestry(grammar, grammars)
         ancestor_index = {
             grammar_id: index
             for index, grammar_id in enumerate(ancestor_ids)
@@ -151,9 +151,7 @@ class GrammarRuleSelector:
         '''
 
         # Resolve ancestry and keep every in-scope production, including repeats.
-        ancestor_ids = set(
-            GrammarRuleSelector._walk_ancestry(grammar, grammars)
-        )
+        ancestor_ids = set(walk_ancestry(grammar, grammars))
 
         # Filter only; same-named productions across grammars all survive.
         return [
@@ -181,7 +179,7 @@ class GrammarRuleSelector:
         '''
 
         # Index the catalogue and walk reachability from the candidate parents.
-        by_id = GrammarRuleSelector._grammar_index(grammars)
+        by_id = grammar_index(grammars)
         visited = set()
 
         # Return True as soon as the candidate grammar is reached.

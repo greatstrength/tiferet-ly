@@ -6,7 +6,7 @@
 from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.mappers.production import SimpleProductionRuleAggregate
 from tiferet_ly.mappers.token import SimpleTokenRuleAggregate
-from tiferet_ly.utils.grammar import GrammarRuleSelector
+from tiferet_ly.utils.grammar import GrammarRuleSelector, walk_ancestry
 
 # *** functions
 
@@ -91,7 +91,7 @@ def test_walk_ancestry_empty_parents() -> None:
     root = grammar('core')
 
     # Assert the target is the only resolved id.
-    assert GrammarRuleSelector._walk_ancestry(root, []) == ['core']
+    assert walk_ancestry(root, []) == ['core']
 
 # ** test: walk_ancestry_single_parent_chain
 def test_walk_ancestry_single_parent_chain() -> None:
@@ -105,7 +105,7 @@ def test_walk_ancestry_single_parent_chain() -> None:
     x = grammar('X', ['Y'])
 
     # Assert the chain is most-fundamental first, target last.
-    assert GrammarRuleSelector._walk_ancestry(x, [x, y, z]) == ['Z', 'Y', 'X']
+    assert walk_ancestry(x, [x, y, z]) == ['Z', 'Y', 'X']
 
 # ** test: walk_ancestry_diamond
 def test_walk_ancestry_diamond() -> None:
@@ -120,7 +120,7 @@ def test_walk_ancestry_diamond() -> None:
     x = grammar('X', ['Y', 'Z'])
 
     # Assert the exact diamond order from RFP-004.
-    assert GrammarRuleSelector._walk_ancestry(x, [w, y, z, x]) == ['Y', 'W', 'Z', 'X']
+    assert walk_ancestry(x, [w, y, z, x]) == ['Y', 'W', 'Z', 'X']
 
 # ** test: walk_ancestry_unrelated_parents_later_declared_wins
 def test_walk_ancestry_unrelated_parents_later_declared_wins() -> None:
@@ -134,7 +134,7 @@ def test_walk_ancestry_unrelated_parents_later_declared_wins() -> None:
     x = grammar('X', ['Y', 'Z'])
 
     # Assert Z is more precedent than Y.
-    result = GrammarRuleSelector._walk_ancestry(x, [y, z, x])
+    result = walk_ancestry(x, [y, z, x])
     assert result.index('Z') > result.index('Y')
     assert result[-1] == 'X'
 
@@ -148,7 +148,7 @@ def test_walk_ancestry_dangling_parent_is_skipped() -> None:
     x = grammar('X', ['missing'])
 
     # Assert the dangling parent contributes nothing.
-    assert GrammarRuleSelector._walk_ancestry(x, [x]) == ['X']
+    assert walk_ancestry(x, [x]) == ['X']
 
 # ** test: select_tokens_filters_and_preserves_order
 def test_select_tokens_filters_and_preserves_order() -> None:
