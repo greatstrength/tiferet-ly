@@ -9,8 +9,14 @@ from typing import Callable, List, Tuple, Union
 
 # ** app
 from tiferet.interfaces.core import ServiceError
-from ..mappers.production import ProductionRuleAggregate
-from ..mappers.token import TokenRuleAggregate
+from ..mappers.production import (
+    ProductionRuleAggregate,
+    SimpleProductionRuleAggregate,
+)
+from ..mappers.token import (
+    SimpleTokenRuleAggregate,
+    TokenRuleAggregate,
+)
 
 # *** constants
 
@@ -75,6 +81,36 @@ class RuleTranslator:
         # Return the one function the compiled source defined.
         return namespace[attr_name]
 
+    # * method: _pass_through (static)
+    @staticmethod
+    def _pass_through(rule: SimpleProductionRuleAggregate) -> Callable:
+        '''
+        Synthesize the literal p[0] = p[1] action for a simple production.
+
+        :param rule: The simple production whose spec must have one RHS symbol.
+        :type rule: SimpleProductionRuleAggregate
+        :return: The synthesized pass-through function.
+        :rtype: Callable
+        '''
+
+        # A simple production is valid only when the right-hand side is one symbol.
+        rhs = rule.spec.split(':', 1)[1].split() if ':' in rule.spec else []
+        if len(rhs) != 1:
+            ServiceError.raise_for(
+                RuleTranslator,
+                RULE_PATTERN_INVALID_ID,
+                message='Simple production spec must have exactly one right-hand-side symbol.',
+                rule_name=rule.name,
+            )
+
+        # Compile the literal pass-through body and return the function.
+        return RuleTranslator._compile_action(
+            f'p_{rule.name}',
+            'p',
+            'p[0] = p[1]',
+            rule.name,
+        )
+
     # * method: translate_token_rule (static)
     @staticmethod
     def translate_token_rule(rule: TokenRuleAggregate) -> Tuple[str, Union[str, Callable]]:
@@ -101,7 +137,7 @@ class RuleTranslator:
 
         # Simple rules are an identity translation of the declared pattern.
         attr_name = f't_{rule.name}'
-        if getattr(rule, 'action', None) is None:
+        if isinstance(rule, SimpleTokenRuleAggregate):
             return (attr_name, rule.pattern)
 
         # Complex rules become a self-less function whose docstring is the pattern.
@@ -131,35 +167,18 @@ class RuleTranslator:
         # Every production becomes a synthesized function; PLY has no string shortcut.
         attr_name = f'p_{rule.name}'
 
-        # Simple productions use a literal pass-through when the RHS is one symbol.
-        if getattr(rule, 'action', None) is None:
-            rhs = rule.spec.split(':', 1)[1].split() if ':' in rule.spec else []
-            if len(rhs) != 1:
-                ServiceError.raise_for(
-                    RuleTranslator,
-                    RULE_PATTERN_INVALID_ID,
-                    message='Simple production spec must have exactly one right-hand-side symbol.',
-                    rule_name=rule.name,
-                )
-
+        # Simple productions get the literal pass-through; complex ones compile action.
+        if isinstance(rule, SimpleProductionRuleAggregate):
+            func = RuleTranslator._pass_through(rule)
+        else:
             func = RuleTranslator._compile_action(
                 attr_name,
                 'p',
-                'p[0] = p[1]',
+                rule.action,
                 rule.name,
             )
-            func.__doc__ = rule.spec
 
-            # Return the prefixed name and the pass-through function.
-            return (attr_name, func)
-
-        # Complex productions compile the declared action and carry the spec as __doc__.
-        func = RuleTranslator._compile_action(
-            attr_name,
-            'p',
-            rule.action,
-            rule.name,
-        )
+        # Carry the declared spec as the function docstring.
         func.__doc__ = rule.spec
 
         # Return the prefixed name and the synthesized function.
