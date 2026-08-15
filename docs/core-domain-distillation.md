@@ -1,6 +1,6 @@
 # Core Domain Distillation — Tiferet-Ly (Lex/Yacc Wrapper)
 
-**Status:** Draft · **Domain:** `tiferet-ly` · **Code:** `tiferet_ly/` · **Branch:** `docs-core-domain-vision-statement-and-distillation`
+**Status:** Draft · **Domain:** `tiferet-ly` · **Code:** `tiferet_ly/` · **Branch:** `v1.x-proto`
 **Companion:** `docs/domain-vision.md`
 
 ## 1. Purpose of this document
@@ -10,16 +10,15 @@ declared language into a working reader, how its pieces relate to the wider
 Tiferet framework and to the third-party engine it wraps, and where the
 design is still open.
 
-Tiferet-Ly does not yet have an implementation: at the time of writing, the
-repository contains only a license, a README, and this pair of documents.
-Every claim below is therefore either (a) a verified fact about the behavior
-of Python Lex-Yacc (PLY), the open-source library this component wraps,
-drawn from PLY's own documented conventions, or (b) a verified fact about the
-current Tiferet framework (v2.0.0b16) this component is built on, cited to
-the exact file and line in the local `tiferet` checkout. Nothing below
-describes existing `tiferet-ly` code, because none exists yet; this
-document's job is to give a first implementation something precise to be
-measured against, and a reviewer something precise to hold it to.
+Tiferet-Ly now has a prototype on `v1.x-proto` through TLY1-RFP-004
+(domain models, mappers/repositories, and the grammar-rule selector).
+Claims below about PLY remain verified facts about that library's own
+conventions. Claims about the Tiferet framework remain cited to the local
+`tiferet` checkout. Claims about this component's own vocabulary that
+TLY1-RFP-006 and TLY1-RFP-007 have now settled (lexeme, optional tree
+node, action shorthand) are design facts those RFPs freeze, not yet
+shipped code — they are recorded here so later implementation is measured
+against one glossary rather than rediscovered per RFP.
 
 ## 2. The core domain, restated precisely
 Tiferet-Ly's core domain is **turning a declared small language — its
@@ -72,7 +71,8 @@ that does the actual word-recognition and sentence-recognition work
 Tiferet-Ly wraps. Not part of Tiferet; treated as infrastructure.
 
 **Token** — one recognized word: a name (e.g. `NUMBER`, `PLUS`) plus the
-literal text PLY matched for it.
+literal text PLY matched for it. The declared *rule* that recognizes it is
+a token rule; the recognized instance itself is a lexeme (below).
 
 **Token rule** — a declaration of how one kind of token is recognized: a
 name, and either a raw pattern or a pattern plus a small action (Section 2,
@@ -91,7 +91,8 @@ a production); it carries no executable action of its own.
 **Complex rule** — a token rule or production whose declaration pairs a
 pattern with a small block of executable logic that runs whenever the rule
 matches (converting matched text to a number, building a piece of structured
-output, and so on).
+output, and so on). That block is the rule's **action** — a source fragment
+compiled at translate time (5.2), not a Feature parameter.
 
 **Grammar declaration** — the complete, declared description of one small
 language: its full catalogue of token rules and productions, together. This
@@ -116,6 +117,41 @@ exists to satisfy correctly on a declarer's behalf.
 **Reader** — the assembled, ready-to-use pair of a built PLY lexer and a
 built PLY parser for one grammar declaration; the thing Tiferet-Ly ultimately
 hands back to a consumer.
+
+**Lexeme** — one recognized word as this component returns it: a name
+(`type`), a payload (`value`), and a source span (`lineno`, `lexpos`).
+It is not a token rule. TLY1-RFP-006 freezes these four fields so a later
+tree node, and every lex/parse failure, reuse one location convention
+rather than inventing a second. The assembled lexer returns the Aggregate
+form (`LexemeAggregate`); utils never construct a bare domain object.
+
+**AstNode** — an optional, generic tree node a language *may* put in a
+production's result: a `kind` the language chooses, a list of child nodes,
+an optional `value`, and the same `lineno` / `lexpos` span a lexeme
+carries. It is not required. It is not one class per production name —
+production names are alternatives, not node types. A language that already
+has its own tree (for example a compiler's declaration / statement /
+expression Aggregates) does not use this type. TLY1-RFP-007.
+
+**Action shorthand** — a `$`-prefixed name written inside a complex rule's
+action (the default is `$ast`) that translation rewrites to a real class
+name and binds into the compile namespace, so a declaration can name a
+factory without importing it. Same *family* as the framework's `$env.` /
+`$r.` prefixes (`tiferet/assets/core.py:54`, `tiferet/assets/core.py:57`)
+— a documented, minimal mapping from a declared spelling to a binding —
+and a different *layer*: `$env` / `$r` resolve a Feature parameter value
+before a step runs (`tiferet/blueprints/core.py:132`,
+`tiferet/contexts/feature.py:265`); an action shorthand rewrites action
+*source* at compile time inside the translation utility. It is not a
+second action language.
+
+**Rewrite table** — the mapping that makes action shorthand work: each
+key is a declared `$name`, each value is the class that name becomes.
+Tiferet-Ly ships one default row (`$ast` → `AstNodeAggregate`). A
+consumer adds rows for its own factories (`$decl`, `$expr`, `$stmt`)
+without forking translation, and may overwrite `$ast` with a subclass.
+The table is the extension point; there is no fourth declared catalogue
+of node kinds.
 
 **DomainObject** — Tiferet's shared, read-only base every domain model
 builds on (`tiferet/domain/core.py:242`); the natural base for representing
@@ -182,12 +218,17 @@ never restructures it (TLY1-RFP-001).
 
 At read time, the domain also operates on the raw text supplied to the
 assembled reader, and produces whatever structured result the declaration's
-own actions choose to build — the domain has no opinion on that result's
-shape.
+own actions choose to build. The domain imposes no *required* shape on
+that result: a number, a list, a dict, a language-owned Aggregate, or an
+optional `AstNode` are all legitimate. Tiferet-Ly ships the last of those
+as a convenience for languages that do not already have a tree; it does
+not wrap a result that did not ask to be a tree (TLY1-RFP-007).
 
 ## 5. The behaviors
-Tiferet-Ly's work divides into four bounded steps. Every named event below is
-a proposed shape, not existing code — see Section 1.
+Tiferet-Ly's work divides into four bounded steps. 5.1 and the selector half
+of 5.3 are in code on `v1.x-proto` (TLY1-RFP-001, 002, 004). 5.2, the PLY
+half of 5.3, 5.4, and the optional tree node are specified by published or
+drafted RFPs and are not all in code yet.
 
 ### 5.1 Declaring a language
 *Turn a grammar declaration (however it is authored — YAML is the presumed
@@ -217,11 +258,16 @@ rule or any production, translation must synthesize a callable whose
 docstring carries the declared pattern (per Section 3's
 docstring-carried-pattern convention) and whose body runs the declared
 action against the argument PLY will pass it — a token or grammar-production
-value object that keeps its own mutations. This is the step where a
-declarer's intent (a pattern, an action) becomes something that satisfies a
-third-party library's own conventions, and it is the one behavior most
-exposed to PLY's own constraints from Section 4 rather than to anything
-Tiferet defines.
+value object that keeps its own mutations. Before that source is compiled,
+any action shorthand in the fragment is rewritten from the rewrite table
+and the named classes are bound into the compile namespace, so `$ast.new(...)`
+becomes a call on `AstNodeAggregate` without the declaration importing it
+(TLY1-RFP-007). A simple production still synthesizes the literal
+`p[0] = p[1]` and is never auto-wrapped as a tree node. This is the step
+where a declarer's intent (a pattern, an action) becomes something that
+satisfies a third-party library's own conventions, and it is the one
+behavior most exposed to PLY's own constraints from Section 4 rather than
+to anything Tiferet defines.
 
 **Verdict:** this is where the rule-complexity axis lives — a simple rule and
 a complex rule are translated differently — and it must remain strictly
@@ -253,10 +299,13 @@ result.*
 
 Invokes the assembled parser (which itself drives the assembled lexer as PLY
 normally does) against supplied input, and returns whatever the
-declaration's own complex-rule actions constructed along the way, or
-surfaces a recognition failure naming where reading stopped.
+declaration's own complex-rule actions constructed along the way — any
+shape, including an `AstNode` if the action built one — or surfaces a
+recognition failure naming where reading stopped. Failures name the same
+span a lexeme carries (`lineno`, `lexpos`, and when known `type` / `value`)
+so a later walker does not learn a second coordinate system (TLY1-RFP-006).
 
-**Verdict:** fully agnostic to all three axes named in Section 2 — reading
+**Verdict:** fully agnostic to all four axes named in Section 2 — reading
 text is the one behavior that looks identical no matter which language was
 declared, and no matter how any of its rules were shaped.
 
@@ -308,6 +357,8 @@ rather than paraphrased through Tiferet's own vocabulary.
 - The rule-complexity branch in translation (5.2) as a *mechanism* — simple
   and complex rules are always translated by the same two code paths,
   whatever language declared them.
+- The rewrite-table mechanism itself (5.2) — one mapping, applied the same
+  way for every language; which rows a given language adds is axis 3.
 
 **Variable — one definition per declared language:**
 - The full token and production catalogue itself: which words and sentence
@@ -319,15 +370,19 @@ rather than paraphrased through Tiferet's own vocabulary.
   rules belong to which, or to none — common to every dialect
   (TLY1-RFP-001).
 - Whatever structured result a language's actions choose to build during
-  5.4 — Tiferet-Ly imposes no shape on it.
+  5.4 — Tiferet-Ly imposes no *required* shape on it. An optional generic
+  node (`AstNode`) exists for languages that want a tree and do not already
+  own one; a language that already owns one binds its own factories as
+  extra rewrite-table rows (TLY1-RFP-007).
+- Which rewrite-table rows a language adds beyond the default `$ast` row.
 
 **Currently entangled — the honest inventory:**
 
-Because no implementation exists yet (Section 1), there is no code-level
-entanglement to report today. The honest content of this section is instead
-the entanglement this design is already at risk of accumulating on first
-implementation, named now so a first PR can be judged against it rather than
-discovering it after the fact:
+The honest content of this section is the entanglement this design is still
+at risk of accumulating — some of it already mitigated by TLY1-RFP-001's
+ordered catalogues, some of it still waiting on later RFPs — named so an
+implementation can be judged against it rather than discovering it after
+the fact:
 - **The ordering constraint in Section 4 is real for PLY but easy to lose in
   a config-driven translation.** A declaration format such as YAML has no
   inherent order guarantee across all parsers and versions the way a
@@ -348,18 +403,30 @@ discovering it after the fact:
   This is not a defect to fix; it is a property of the domain that should be
   named in any TRD that specifies 5.2, rather than discovered when the first
   complex rule containing a mistake produces a confusing failure.
+- **Action shorthand is a token rewrite, not a second language.** `$ast`
+  is replaced in the action source before compile; a string literal that
+  happens to contain those characters is rewritten too. That is a named
+  limitation of a mapping, not a reason to grow a mini-parser inside 5.2.
+  Growing one would entangle axis 3 (what a language's actions mean) with
+  the translation mechanism that must stay language-agnostic.
 
 ## 9. Boundaries
 **Inside the domain:** accepting a declared language's vocabulary and
-grammar, translating that declaration into PLY's own required shape,
-assembling a working reader from it, and running that reader against
-supplied text to produce a structured result or a recognition failure.
+grammar, translating that declaration into PLY's own required shape
+(including compiling a complex rule's action and rewriting any action
+shorthand it contains), assembling a working reader from it, running that
+reader against supplied text, and offering — without requiring — a generic
+tree node and a default `$ast` row for languages that want a tree and do
+not already own one.
 
 **Outside the domain:**
-- Deciding what a specific language's words and sentence patterns *mean*, or
-  what should happen with a structured result once produced — owned
-  entirely by whoever authors a grammar declaration and consumes
-  Tiferet-Ly's output, not by Tiferet-Ly.
+- Deciding what a specific language's words and sentence patterns *mean*,
+  what a well-formed result of that language looks like, or what should
+  happen with a structured result once produced — owned entirely by whoever
+  authors a grammar declaration and consumes Tiferet-Ly's output, not by
+  Tiferet-Ly. A language that already has a tree keeps that tree; extra
+  rewrite-table rows are how it names its own factories, not a reason to
+  move those types into this package.
 - PLY's own word- and sentence-recognition behavior — owned by PLY itself;
   Tiferet-Ly translates and assembles, it does not reimplement or alter what
   PLY is able to recognize.
@@ -382,20 +449,27 @@ supplied text to produce a structured result or a recognition failure.
    `ConfigurationRepository`-based repository that locates an entry via the
    `grammars` root node and `id`, following `tiferet/mappers/core.py:26`,
    `tiferet/mappers/core.py:92`, and `tiferet/repos/core.py:22`.
-3. **Author the TRD for the translation service (5.2).** In particular, how
-   a complex rule's action is turned into running code safely, and how the
-   ordering entanglement named in Section 8 is prevented rather than merely
-   documented.
-4. **Author the TRD for the assembly and read events/interfaces (5.3–5.4).**
-   Including the `Service` contract that keeps PLY itself behind a
-   swappable boundary; the subgrammar-selection and cross-subgrammar
-   conflict-resolution logic (declared-order tie-break, TLY1-RFP-001) that
-   combines a grammar's flat, tagged rule catalogues into the specific rule
-   set a given reader actually uses; and the test harness these events
-   would use, following Tiferet's own `DomainEvent`-testing convention
-   (`tiferet/events/core.py:18`).
+3. **Author the TRD for the translation utility (5.2).** Scoped by
+   TLY1-RFP-003 (issue #5): how a complex rule's action is turned into
+   running code, failing loud and attributable rather than sandboxed, and
+   how the ordering entanglement named in Section 8 is prevented rather
+   than merely documented. The compile hook this step exposes is what
+   TLY1-RFP-007 later extends with the rewrite table.
+4. **Author the TRD for the assembly and read Features (5.3–5.4).** Scoped
+   by TLY1-RFP-006 (issue #11): the `Service` contract that keeps PLY
+   behind a swappable boundary; the grammar-rule selector
+   (TLY1-RFP-004 / issue #8) that combines a grammar's flat catalogues
+   into the rule set a given reader actually uses; the `Lexeme` span; and
+   a parse result that remains untyped.
+5. **Author the TRD for the optional tree node and action shorthand.**
+   Scoped by TLY1-RFP-007 (issue #13): `AstNode` / `AstNodeAggregate`, the
+   default `$ast` rewrite-table row, and the compile-time hook on
+   translation. Does not change 5.4's untyped result.
+6. **Author the remaining unpublished RFPs** — AST rendering (walks *a*
+   tree and must not assume every result is one) and the end-to-end
+   example (the first in-repo user of `$ast`).
 
-Each is independently scopeable, and together they are the actual first
-implementation this pair of documents is meant to be measured against. The
-v1 release roadmap tracks these as RFP-001 through RFP-008; RFP-001 (item 1
-above) is the first to be scoped.
+Each is independently scopeable. The v1 release roadmap tracks these as
+RFP-001 through the unpublished rendering and example RFPs; items 1–5 of
+the original list are now published RFPs (item 5 is TLY1-RFP-007 / issue
+#13).

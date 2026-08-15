@@ -1,6 +1,6 @@
 # Domain Vision Statement — Tiferet-Ly (Lex/Yacc Wrapper)
 
-**Status:** Draft · **Domain:** `tiferet-ly` · **Code:** `tiferet_ly/` · **Branch:** `docs-core-domain-vision-statement-and-distillation`
+**Status:** Draft · **Domain:** `tiferet-ly` · **Code:** `tiferet_ly/` · **Branch:** `v1.x-proto`
 
 ## The bet: a small language's rules should be declared, not hand-wired into code
 Most tools that read a made-up language — a configuration format, a command
@@ -62,6 +62,14 @@ Tiferet-Ly keeps those two cases separate, so a simple rule stays a one-line
 declaration and never has to carry the extra weight that only the
 complicated rules actually need.
 
+**A tree is available, never required.** Some languages want the reader to
+hand back a tree of recognized sentences; some just want a number or a list.
+Tiferet-Ly ships a small, generic tree a declaration can name with a short
+spelling (`$ast`), the same kind of documented shorthand the rest of Tiferet
+already uses for environment and request values. A language that already has
+its own tree keeps it. A language that does not want a tree never mentions
+one.
+
 ## The core of the work
 Every language Tiferet-Ly reads goes through the same three-part journey:
 
@@ -88,11 +96,12 @@ recognizing. It exposes that engine's own rules as something declared
 instead of hand-written; it does not compete with or replace the engine
 underneath it.
 
-It does not decide what should happen with the structured result once a
-piece of text has been successfully read. Whatever a specific language's
-words and sentences are supposed to mean — and whatever should be done with
-them once recognized — belongs to whoever declared that language and
-consumes Tiferet-Ly's output, not to Tiferet-Ly itself.
+It does not decide what a recognized sentence *means*, or require that the
+result be a tree. It offers a generic tree for languages that want one and
+do not already have their own; it does not wrap a result that did not ask
+to be a tree, and it does not take over the tree of a language that already
+owns one. Whatever should be done with the result once produced belongs to
+whoever declared that language and consumes Tiferet-Ly's output.
 
 It has no opinion about which language is being declared. Whether the
 language being read is a tiny command syntax, a data format, or something
