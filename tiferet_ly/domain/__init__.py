@@ -16,6 +16,9 @@ from .production import (
 from .grammar import (
     Grammar,
 )
+from .ast import (
+    AstNode,
+)
 
 # *** exports
 
@@ -27,4 +30,5 @@ __all__ = [
     'SimpleProductionRule',
     'ComplexProductionRule',
     'Grammar',
+    'AstNode',
 ]

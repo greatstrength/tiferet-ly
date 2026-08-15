@@ -5,10 +5,11 @@
 # ** core
 import re
 import textwrap
-from typing import Callable, List, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 # ** app
 from tiferet.interfaces.core import ServiceError
+from ..mappers.ast import AstNodeAggregate
 from ..mappers.production import (
     ProductionRuleAggregate,
     SimpleProductionRuleAggregate,
@@ -26,6 +27,37 @@ ACTION_COMPILATION_FAILED_ID = 'ACTION_COMPILATION_FAILED'
 # ** constant: rule_pattern_invalid_id
 RULE_PATTERN_INVALID_ID = 'RULE_PATTERN_INVALID'
 
+# *** functions
+
+# ** function: rewrite_action
+def rewrite_action(action: str, rewrites: Dict[str, type]) -> str:
+    '''
+    Replace declared action shorthands with their bound class names.
+
+    Longer keys are applied first so a shorter key cannot clip a longer
+    one. Each key is matched as a token and does not eat a following
+    identifier continuation.
+
+    :param action: The declared action source fragment.
+    :type action: str
+    :param rewrites: The effective shorthand-to-class mapping.
+    :type rewrites: Dict[str, type]
+    :return: The rewritten action source.
+    :rtype: str
+    '''
+
+    # Apply longer keys first so $stmt cannot clip $stmt_list.
+    rewritten = action
+    for key in sorted(rewrites, key=len, reverse=True):
+        rewritten = re.sub(
+            re.escape(key) + r'(?![A-Za-z0-9_])',
+            rewrites[key].__name__,
+            rewritten,
+        )
+
+    # Return the rewritten fragment.
+    return rewritten
+
 # *** utils
 
 # ** util: rule_translator
@@ -36,13 +68,19 @@ class RuleTranslator:
     deciding which rules belong to a reader.
     '''
 
-    # * method: _compile_action (static)
-    @staticmethod
-    def _compile_action(
-            attr_name: str,
-            arg_name: str,
-            action: str,
-            rule_name: str) -> Callable:
+    # * attribute: default_rewrites
+    DEFAULT_REWRITES = {
+        '$ast': AstNodeAggregate,
+    }
+
+    # * method: _compile_action (classmethod)
+    @classmethod
+    def _compile_action(cls,
+                        attr_name: str,
+                        arg_name: str,
+                        action: str,
+                        rule_name: str,
+                        rewrites: Optional[Dict[str, type]] = None) -> Callable:
         '''
         Compile a declared action into a plain, self-less function.
 
@@ -54,24 +92,47 @@ class RuleTranslator:
         :type action: str
         :param rule_name: The rule name used to attribute compilation failures.
         :type rule_name: str
+        :param rewrites: Optional extra or overriding shorthand bindings.
+        :type rewrites: Optional[Dict[str, type]]
         :return: The synthesized function.
         :rtype: Callable
         '''
 
-        # Build a one-parameter function whose body is the declared action.
+        # Merge the default table with any caller-supplied rows.
+        effective = {
+            **cls.DEFAULT_REWRITES,
+            **(rewrites or {}),
+        }
+
+        # Rewrite only the action fragment, then build the function source.
+        rewritten = rewrite_action(action, effective)
         source = (
             f'def {attr_name}({arg_name}):\n'
-            f'{textwrap.indent(textwrap.dedent(action), "    ")}'
+            f'{textwrap.indent(textwrap.dedent(rewritten), "    ")}'
         )
 
-        # Compile and execute into a fresh namespace so calls do not share state.
+        # Seed a fresh namespace with one bind per unique class name.
+        namespace: Dict[str, type] = {}
+        for factory in effective.values():
+            name = factory.__name__
+            if name in namespace and namespace[name] is not factory:
+                ServiceError.raise_for(
+                    cls,
+                    ACTION_COMPILATION_FAILED_ID,
+                    message=(
+                        f'Rewrite values share the class name {name!r}.'
+                    ),
+                    rule_name=rule_name,
+                )
+            namespace[name] = factory
+
+        # Compile and execute into the seeded namespace.
         try:
             compiled = compile(source, f'<tiferet_ly:{attr_name}>', 'exec')
-            namespace = {}
             exec(compiled, namespace)
         except Exception as error:
             ServiceError.raise_for(
-                RuleTranslator,
+                cls,
                 ACTION_COMPILATION_FAILED_ID,
                 message=str(error),
                 cause=error,
@@ -81,9 +142,9 @@ class RuleTranslator:
         # Return the one function the compiled source defined.
         return namespace[attr_name]
 
-    # * method: _pass_through (static)
-    @staticmethod
-    def _pass_through(rule: SimpleProductionRuleAggregate) -> Callable:
+    # * method: _pass_through (classmethod)
+    @classmethod
+    def _pass_through(cls, rule: SimpleProductionRuleAggregate) -> Callable:
         '''
         Synthesize the literal p[0] = p[1] action for a simple production.
 
@@ -97,28 +158,32 @@ class RuleTranslator:
         rhs = rule.spec.split(':', 1)[1].split() if ':' in rule.spec else []
         if len(rhs) != 1:
             ServiceError.raise_for(
-                RuleTranslator,
+                cls,
                 RULE_PATTERN_INVALID_ID,
                 message='Simple production spec must have exactly one right-hand-side symbol.',
                 rule_name=rule.name,
             )
 
         # Compile the literal pass-through body and return the function.
-        return RuleTranslator._compile_action(
+        return cls._compile_action(
             f'p_{rule.name}',
             'p',
             'p[0] = p[1]',
             rule.name,
         )
 
-    # * method: translate_token_rule (static)
-    @staticmethod
-    def translate_token_rule(rule: TokenRuleAggregate) -> Tuple[str, Union[str, Callable]]:
+    # * method: translate_token_rule (classmethod)
+    @classmethod
+    def translate_token_rule(cls,
+                             rule: TokenRuleAggregate,
+                             rewrites: Optional[Dict[str, type]] = None) -> Tuple[str, Union[str, Callable]]:
         '''
         Translate one token rule into a PLY t_* attribute pair.
 
         :param rule: The token rule to translate.
         :type rule: TokenRuleAggregate
+        :param rewrites: Optional extra or overriding shorthand bindings.
+        :type rewrites: Optional[Dict[str, type]]
         :return: The prefixed attribute name and the pattern string or function.
         :rtype: Tuple[str, Union[str, Callable]]
         '''
@@ -128,7 +193,7 @@ class RuleTranslator:
             re.compile(rule.pattern)
         except re.error as error:
             ServiceError.raise_for(
-                RuleTranslator,
+                cls,
                 RULE_PATTERN_INVALID_ID,
                 message=str(error),
                 cause=error,
@@ -141,25 +206,30 @@ class RuleTranslator:
             return (attr_name, rule.pattern)
 
         # Complex rules become a self-less function whose docstring is the pattern.
-        func = RuleTranslator._compile_action(
+        func = cls._compile_action(
             attr_name,
             't',
             rule.action,
             rule.name,
+            rewrites=rewrites,
         )
         func.__doc__ = rule.pattern
 
         # Return the prefixed name and the synthesized function.
         return (attr_name, func)
 
-    # * method: translate_production_rule (static)
-    @staticmethod
-    def translate_production_rule(rule: ProductionRuleAggregate) -> Tuple[str, Callable]:
+    # * method: translate_production_rule (classmethod)
+    @classmethod
+    def translate_production_rule(cls,
+                                  rule: ProductionRuleAggregate,
+                                  rewrites: Optional[Dict[str, type]] = None) -> Tuple[str, Callable]:
         '''
         Translate one production rule into a PLY p_* attribute pair.
 
         :param rule: The production rule to translate.
         :type rule: ProductionRuleAggregate
+        :param rewrites: Optional extra or overriding shorthand bindings.
+        :type rewrites: Optional[Dict[str, type]]
         :return: The prefixed attribute name and the synthesized function.
         :rtype: Tuple[str, Callable]
         '''
@@ -169,13 +239,14 @@ class RuleTranslator:
 
         # Simple productions get the literal pass-through; complex ones compile action.
         if isinstance(rule, SimpleProductionRuleAggregate):
-            func = RuleTranslator._pass_through(rule)
+            func = cls._pass_through(rule)
         else:
-            func = RuleTranslator._compile_action(
+            func = cls._compile_action(
                 attr_name,
                 'p',
                 rule.action,
                 rule.name,
+                rewrites=rewrites,
             )
 
         # Carry the declared spec as the function docstring.

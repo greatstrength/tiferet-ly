@@ -24,6 +24,9 @@ from .grammar import (
     GrammarAggregate,
     GrammarConfigObject,
 )
+from .ast import (
+    AstNodeAggregate,
+)
 
 # *** exports
 
@@ -41,4 +44,5 @@ __all__ = [
     'ProductionRuleConfigObject',
     'GrammarAggregate',
     'GrammarConfigObject',
+    'AstNodeAggregate',
 ]

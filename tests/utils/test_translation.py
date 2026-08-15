@@ -18,10 +18,12 @@ from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
 )
+from tiferet_ly.mappers.ast import AstNodeAggregate
 from tiferet_ly.utils.translation import (
     ACTION_COMPILATION_FAILED_ID,
     RULE_PATTERN_INVALID_ID,
     RuleTranslator,
+    rewrite_action,
 )
 
 # *** functions
@@ -350,3 +352,201 @@ def test_no_ply_import() -> None:
 
     # Assert ply is not among the module's imported names.
     assert 'ply' not in translation.__dict__
+    assert 'tiferet_ly.domain' not in translation.__dict__
+    assert not any(
+        name.startswith('tiferet_ly.domain')
+        for name in getattr(translation, '__dict__', {})
+    )
+
+
+# ** test: default_rewrites_binds_ast_node_aggregate
+def test_default_rewrites_binds_ast_node_aggregate() -> None:
+    '''
+    Test that the default rewrite table binds $ast to AstNodeAggregate.
+    '''
+
+    # Assert the published default table.
+    assert RuleTranslator.DEFAULT_REWRITES == {
+        '$ast': AstNodeAggregate,
+    }
+
+
+# ** test: translate_production_rule_rewrites_ast_new
+def test_translate_production_rule_rewrites_ast_new() -> None:
+    '''
+    Test that $ast.new compiles to an AstNodeAggregate with those children.
+    '''
+
+    # Translate a production whose action constructs a generic add node.
+    left = AstNodeAggregate.leaf('num', 1)
+    right = AstNodeAggregate.leaf('num', 2)
+    _, func = RuleTranslator.translate_production_rule(
+        complex_production(action="p[0] = $ast.new('add', [p[1], p[3]])"),
+    )
+    parsed = [None, left, '+', right]
+    func(parsed)
+
+    # Assert the constructed node and that $ast is gone from the source.
+    assert isinstance(parsed[0], AstNodeAggregate)
+    assert parsed[0].kind == 'add'
+    assert parsed[0].children == [left, right]
+    assert '$ast' not in func.__code__.co_consts
+    assert 'AstNodeAggregate' in func.__code__.co_names
+
+
+# ** test: translate_production_rule_int_action_needs_no_ast
+def test_translate_production_rule_int_action_needs_no_ast() -> None:
+    '''
+    Test that an int-returning action still compiles without $ast.
+    '''
+
+    # Translate a production that converts its first symbol to int.
+    _, func = RuleTranslator.translate_production_rule(
+        complex_production(action='p[0] = int(p[1])'),
+    )
+    parsed = [None, '12']
+    func(parsed)
+
+    # Assert the result is a plain int.
+    assert parsed[0] == 12
+    assert type(parsed[0]) is int
+
+
+# ** test: translate_production_rule_simple_is_not_wrapped
+def test_translate_production_rule_simple_is_not_wrapped() -> None:
+    '''
+    Test that a simple production is not wrapped in an AstNode.
+    '''
+
+    # Translate and invoke the literal pass-through.
+    _, func = RuleTranslator.translate_production_rule(simple_production())
+    parsed = [None, 7]
+    func(parsed)
+
+    # Assert the result is the first symbol, not a tree node.
+    assert parsed[0] == 7
+    assert not isinstance(parsed[0], AstNodeAggregate)
+
+
+# ** test: translate_production_rule_merges_and_overwrites_rewrites
+def test_translate_production_rule_merges_and_overwrites_rewrites() -> None:
+    '''
+    Test that caller rewrites merge with $ast and can overwrite $ast.
+    '''
+
+    # A test double whose new classmethod records construction.
+    class SomeAggregate:
+        def __init__(self, kind):
+            self.kind = kind
+
+        @classmethod
+        def new(cls, kind):
+            return cls(kind)
+
+    class Subclass(AstNodeAggregate):
+        pass
+
+    # Merge: $decl constructs the double and $ast still constructs the default.
+    _, decl_func = RuleTranslator.translate_production_rule(
+        complex_production(action="p[0] = $decl.new('module')"),
+        rewrites={'$decl': SomeAggregate},
+    )
+    parsed = [None]
+    decl_func(parsed)
+    assert isinstance(parsed[0], SomeAggregate)
+    assert parsed[0].kind == 'module'
+
+    _, ast_func = RuleTranslator.translate_production_rule(
+        complex_production(action="p[0] = $ast.new('add')"),
+        rewrites={'$decl': SomeAggregate},
+    )
+    parsed = [None]
+    ast_func(parsed)
+    assert type(parsed[0]) is AstNodeAggregate
+
+    # Overwrite: $ast constructs the subclass.
+    _, sub_func = RuleTranslator.translate_production_rule(
+        complex_production(action="p[0] = $ast.new('add')"),
+        rewrites={'$ast': Subclass},
+    )
+    parsed = [None]
+    sub_func(parsed)
+    assert type(parsed[0]) is Subclass
+
+
+# ** test: rewrite_action_does_not_clip_longer_key
+def test_rewrite_action_does_not_clip_longer_key() -> None:
+    '''
+    Test that $stmt does not rewrite the prefix of $stmt_list.
+    '''
+
+    # A two-row mapping whose shorter key is a prefix of the longer one.
+    class Stmt:
+        pass
+
+    class StmtList:
+        pass
+
+    rewritten = rewrite_action(
+        'p[0] = $stmt_list.new($stmt.new())',
+        {
+            '$stmt': Stmt,
+            '$stmt_list': StmtList,
+        },
+    )
+
+    # Assert each key rewrote independently.
+    assert rewritten == 'p[0] = StmtList.new(Stmt.new())'
+
+
+# ** test: shared_rewrite_class_name_fails_compilation
+def test_shared_rewrite_class_name_fails_compilation() -> None:
+    '''
+    Test that two rewrite values sharing a __name__ fail compilation.
+    '''
+
+    # Two distinct classes that collide on the bound name.
+    class Factory:
+        @classmethod
+        def new(cls):
+            return cls()
+
+    other = type('Factory', (), {'new': classmethod(lambda cls: cls())})
+
+    # Compile an action that would need both binds.
+    with pytest.raises(ServiceError) as raised:
+        RuleTranslator.translate_production_rule(
+            complex_production(action='p[0] = Factory.new()'),
+            rewrites={
+                '$one': Factory,
+                '$two': other,
+            },
+        )
+
+    # Assert the structured compilation error names the rule.
+    assert raised.value.error_code == ACTION_COMPILATION_FAILED_ID
+    assert raised.value.kwargs['rule_name'] == 'expression'
+
+
+# ** test: translate_production_rule_invokes_subclass_compile_hook
+def test_translate_production_rule_invokes_subclass_compile_hook() -> None:
+    '''
+    Test that a RuleTranslator subclass compile hook is the one invoked.
+    '''
+
+    # Record every compile call on a test subclass.
+    calls = []
+
+    class RecordingTranslator(RuleTranslator):
+        @classmethod
+        def _compile_action(cls, *args, **kwargs):
+            calls.append((args, kwargs))
+            return RuleTranslator._compile_action(*args, **kwargs)
+
+    # Translate through the subclass.
+    RecordingTranslator.translate_production_rule(
+        complex_production(action='p[0] = int(p[1])'),
+    )
+
+    # Assert the subclass hook ran.
+    assert len(calls) == 1
