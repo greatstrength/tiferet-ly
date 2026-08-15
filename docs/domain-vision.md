@@ -65,10 +65,8 @@ complicated rules actually need.
 **A tree is available, never required.** Some languages want the reader to
 hand back a tree of recognized sentences; some just want a number or a list.
 Tiferet-Ly ships a small, generic tree a declaration can name with a short
-spelling (`$ast`), the same kind of documented shorthand the rest of Tiferet
-already uses for environment and request values. A language that already has
-its own tree keeps it. A language that does not want a tree never mentions
-one.
+spelling. A language that already has its own tree keeps it. A language that
+does not want a tree never mentions one.
 
 ## The core of the work
 Every language Tiferet-Ly reads goes through the same three-part journey:
