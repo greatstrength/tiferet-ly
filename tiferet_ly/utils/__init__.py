@@ -4,9 +4,11 @@
 
 # ** app
 from .grammar import GrammarRuleSelector
+from .translation import RuleTranslator
 
 # *** exports
 
 __all__ = [
     'GrammarRuleSelector',
+    'RuleTranslator',
 ]
