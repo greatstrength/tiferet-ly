@@ -32,7 +32,6 @@ def test_ast_node_aggregate_new_and_leaf() -> None:
     assert node.children == [left, right]
     assert AstNodeAggregate.new('expr').children == []
 
-
 # ** test: ast_node_aggregate_mutators
 def test_ast_node_aggregate_mutators() -> None:
     '''
@@ -48,7 +47,6 @@ def test_ast_node_aggregate_mutators() -> None:
     # Assert the mutators updated the fields.
     assert node.children == [child]
     assert node.value == 'kept'
-
 
 # ** test: no_ast_alias_or_persistence_surface
 def test_no_ast_alias_or_persistence_surface() -> None:

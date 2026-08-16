@@ -43,7 +43,6 @@ def test_ast_node_construct() -> None:
     assert 'col' not in AstNode.model_fields
     assert 'lexeme' not in AstNode.model_fields
 
-
 # ** test: ast_node_defaults
 def test_ast_node_defaults() -> None:
     '''
@@ -59,7 +58,6 @@ def test_ast_node_defaults() -> None:
     assert node.lineno is None
     assert node.lexpos is None
 
-
 # ** test: ast_node_requires_kind
 def test_ast_node_requires_kind() -> None:
     '''
@@ -69,7 +67,6 @@ def test_ast_node_requires_kind() -> None:
     # Missing kind raises ValidationError.
     with pytest.raises(ValidationError):
         AstNode()
-
 
 # ** test: ast_node_forbids_extra_fields
 def test_ast_node_forbids_extra_fields() -> None:

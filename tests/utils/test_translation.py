@@ -358,7 +358,6 @@ def test_no_ply_import() -> None:
         for name in getattr(translation, '__dict__', {})
     )
 
-
 # ** test: default_rewrites_binds_ast_node_aggregate
 def test_default_rewrites_binds_ast_node_aggregate() -> None:
     '''
@@ -369,7 +368,6 @@ def test_default_rewrites_binds_ast_node_aggregate() -> None:
     assert RuleTranslator.DEFAULT_REWRITES == {
         '$ast': AstNodeAggregate,
     }
-
 
 # ** test: translate_production_rule_rewrites_ast_new
 def test_translate_production_rule_rewrites_ast_new() -> None:
@@ -393,7 +391,6 @@ def test_translate_production_rule_rewrites_ast_new() -> None:
     assert '$ast' not in func.__code__.co_consts
     assert 'AstNodeAggregate' in func.__code__.co_names
 
-
 # ** test: translate_production_rule_int_action_needs_no_ast
 def test_translate_production_rule_int_action_needs_no_ast() -> None:
     '''
@@ -411,7 +408,6 @@ def test_translate_production_rule_int_action_needs_no_ast() -> None:
     assert parsed[0] == 12
     assert type(parsed[0]) is int
 
-
 # ** test: translate_production_rule_simple_is_not_wrapped
 def test_translate_production_rule_simple_is_not_wrapped() -> None:
     '''
@@ -426,7 +422,6 @@ def test_translate_production_rule_simple_is_not_wrapped() -> None:
     # Assert the result is the first symbol, not a tree node.
     assert parsed[0] == 7
     assert not isinstance(parsed[0], AstNodeAggregate)
-
 
 # ** test: translate_production_rule_merges_and_overwrites_rewrites
 def test_translate_production_rule_merges_and_overwrites_rewrites() -> None:
@@ -473,7 +468,6 @@ def test_translate_production_rule_merges_and_overwrites_rewrites() -> None:
     sub_func(parsed)
     assert type(parsed[0]) is Subclass
 
-
 # ** test: rewrite_action_does_not_clip_longer_key
 def test_rewrite_action_does_not_clip_longer_key() -> None:
     '''
@@ -497,7 +491,6 @@ def test_rewrite_action_does_not_clip_longer_key() -> None:
 
     # Assert each key rewrote independently.
     assert rewritten == 'p[0] = StmtList.new(Stmt.new())'
-
 
 # ** test: shared_rewrite_class_name_fails_compilation
 def test_shared_rewrite_class_name_fails_compilation() -> None:
@@ -526,7 +519,6 @@ def test_shared_rewrite_class_name_fails_compilation() -> None:
     # Assert the structured compilation error names the rule.
     assert raised.value.error_code == ACTION_COMPILATION_FAILED_ID
     assert raised.value.kwargs['rule_name'] == 'expression'
-
 
 # ** test: translate_production_rule_invokes_subclass_compile_hook
 def test_translate_production_rule_invokes_subclass_compile_hook() -> None:
