@@ -1,0 +1,29 @@
+features:
+  lex:
+    default:
+      name: Lex
+      description: Tokenize text against a declared grammar.
+      steps:
+        - &list_tokens
+          service_id: list_tokens
+          name: Load token catalogue
+          data_key: tokens
+        - &list_grammars
+          service_id: list_grammars
+          name: Load grammar catalogue
+          data_key: grammars
+        - service_id: lex_text
+          name: Assemble lexer and tokenize
+  parse:
+    default:
+      name: Parse
+      description: Parse text against a declared grammar.
+      steps:
+        - *list_tokens
+        - &list_productions
+          service_id: list_productions
+          name: Load production catalogue
+          data_key: productions
+        - *list_grammars
+        - service_id: parse_text
+          name: Assemble parser and parse
