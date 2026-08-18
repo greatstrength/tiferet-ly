@@ -76,44 +76,6 @@ def find_productions(
     ]
 
 
-# ** function: assert_starts_resolve
-def assert_starts_resolve(
-        event: DomainEvent,
-        grammars: list,
-        productions: List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]) -> None:
-    '''
-    Verify every persisted grammar's start is still in its effective set.
-
-    :param event: The domain event used to raise a structured error.
-    :type event: DomainEvent
-    :param grammars: The persisted grammar catalogue.
-    :type grammars: list
-    :param productions: The candidate post-mutation production catalogue.
-    :type productions: List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]
-    :return: None
-    :rtype: None
-    '''
-
-    # Check each persisted grammar against the post-mutation catalogue.
-    for grammar in grammars:
-
-        # Resolve the effective productions for this grammar's ancestry.
-        effective = GrammarRuleSelector.select_productions(
-            grammar,
-            grammars,
-            productions,
-        )
-
-        # Verify the grammar's start still names an effective production.
-        event.verify(
-            any(production.name == grammar.start for production in effective),
-            a.error.GRAMMAR_START_NOT_FOUND_ID,
-            message=f'Grammar start not found: {grammar.start} on {grammar.id}.',
-            id=grammar.id,
-            start=grammar.start,
-        )
-
-
 # *** events
 
 # ** event: production_event
@@ -139,6 +101,41 @@ class ProductionEvent(DomainEvent):
 
         # Set the production service dependency.
         self.production_service = production_service
+
+    # * method: _assert_starts_resolve
+    def _assert_starts_resolve(
+            self,
+            grammars: list,
+            productions: List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]) -> None:
+        '''
+        Verify every persisted grammar's start is still in its effective set.
+
+        :param grammars: The persisted grammar catalogue.
+        :type grammars: list
+        :param productions: The candidate post-mutation production catalogue.
+        :type productions: List[Union[SimpleProductionRuleAggregate, ComplexProductionRuleAggregate]]
+        :return: None
+        :rtype: None
+        '''
+
+        # Check each persisted grammar against the post-mutation catalogue.
+        for grammar in grammars:
+
+            # Resolve the effective productions for this grammar's ancestry.
+            effective = GrammarRuleSelector.select_productions(
+                grammar,
+                grammars,
+                productions,
+            )
+
+            # Verify the grammar's start still names an effective production.
+            self.verify(
+                any(production.name == grammar.start for production in effective),
+                a.error.GRAMMAR_START_NOT_FOUND_ID,
+                message=f'Grammar start not found: {grammar.start} on {grammar.id}.',
+                id=grammar.id,
+                start=grammar.start,
+            )
 
     # * method: _require_production
     def _require_production(
@@ -474,7 +471,7 @@ class RemoveProduction(ProductionEvent):
         ]
 
         # Refuse the delete when any persisted start would become unresolved.
-        assert_starts_resolve(self, self.grammar_service.list(), remaining)
+        self._assert_starts_resolve(self.grammar_service.list(), remaining)
 
         # Persist the delete through the pair-keyed service surface.
         self.production_service.delete(name, grammar_id)
@@ -545,7 +542,7 @@ class RenameProduction(ProductionEvent):
             if not production_matches(item, name, grammar_id, spec)
         ]
         remaining.append(production)
-        assert_starts_resolve(self, self.grammar_service.list(), remaining)
+        self._assert_starts_resolve(self.grammar_service.list(), remaining)
 
         # Persist the renamed alternative.
         self.production_service.save(production)
@@ -616,7 +613,7 @@ class ReassignProductionGrammar(ProductionEvent):
             if not production_matches(item, name, grammar_id, spec)
         ]
         remaining.append(production)
-        assert_starts_resolve(self, self.grammar_service.list(), remaining)
+        self._assert_starts_resolve(self.grammar_service.list(), remaining)
 
         # Persist the reassigned alternative.
         self.production_service.save(production)
