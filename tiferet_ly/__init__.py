@@ -15,6 +15,7 @@ try:
         SimpleTokenRule,
         ComplexTokenRule,
         AstNode,
+        Lexeme,
     )
 except Exception as e:
     import os, sys
