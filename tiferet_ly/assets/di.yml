@@ -15,10 +15,10 @@ services:
     parameters:
       grammar_config: grammars.yml
   lexer_service:
-    module_path: tiferet_ly.utils.reader
+    module_path: tiferet_ly.utils.lex
     class_name: PlyLexer
   parser_service:
-    module_path: tiferet_ly.utils.reader
+    module_path: tiferet_ly.utils.parse
     class_name: PlyParser
   list_tokens:
     module_path: tiferet_ly.events.token
