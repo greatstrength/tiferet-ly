@@ -22,16 +22,15 @@ from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
 )
-from tiferet_ly.utils.reader import (
+from tiferet_ly.utils.core import (
     ACTION_EXECUTION_FAILED_ID,
     GRAMMAR_NOT_FOUND_ID,
     LEX_ERROR_ID,
     PARSE_ERROR_ID,
-    PlyLexer,
-    PlyParser,
     READER_BUILD_FAILED_ID,
-    unique_production_attr,
 )
+from tiferet_ly.utils.lex import PlyLexer
+from tiferet_ly.utils.parse import PlyParser
 
 # *** functions
 
@@ -155,8 +154,8 @@ def test_unique_production_attr_suffixes_repeats() -> None:
 
     # Allocate two attribute names for the same production.
     used = {}
-    first = unique_production_attr('expr', used)
-    second = unique_production_attr('expr', used)
+    first = PlyParser.unique_production_attr('expr', used)
+    second = PlyParser.unique_production_attr('expr', used)
 
     # Assert the first keeps the bare name and the second is suffixed.
     assert first == 'p_expr'
@@ -236,7 +235,7 @@ def test_tokenize_unknown_grammar_does_not_call_lex(monkeypatch) -> None:
         called['lex'] = True
         raise AssertionError('lex.lex should not be called')
 
-    monkeypatch.setattr('tiferet_ly.utils.reader.lex.lex', fail_if_called)
+    monkeypatch.setattr('tiferet_ly.utils.core.lex.lex', fail_if_called)
 
     # Tokenize against an empty grammar catalogue.
     with pytest.raises(ServiceError) as raised:
@@ -361,7 +360,7 @@ def test_parse_unknown_grammar_does_not_call_yacc(monkeypatch) -> None:
         called['yacc'] = True
         raise AssertionError('yacc.yacc should not be called')
 
-    monkeypatch.setattr('tiferet_ly.utils.reader.yacc.yacc', fail_if_called)
+    monkeypatch.setattr('tiferet_ly.utils.parse.yacc.yacc', fail_if_called)
 
     # Parse against an empty grammar catalogue.
     with pytest.raises(ServiceError) as raised:
@@ -457,7 +456,7 @@ def test_tokenize_action_failure_raises() -> None:
 # ** test: ply_import_is_isolated
 def test_ply_import_is_isolated() -> None:
     '''
-    Test that only the reader util module imports ply.
+    Test that only the lex and parse util modules import ply.
     '''
 
     # Import the thin events and confirm they do not pull ply into their module.
