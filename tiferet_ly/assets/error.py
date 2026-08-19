@@ -41,3 +41,17 @@ GRAMMAR_PARENT_NOT_FOUND_ID = 'GRAMMAR_PARENT_NOT_FOUND'
 
 # ** constant: grammar_still_referenced_id
 GRAMMAR_STILL_REFERENCED_ID = 'GRAMMAR_STILL_REFERENCED'
+
+# *** constants (ids_reader)
+
+# ** constant: lex_error_id
+LEX_ERROR_ID = 'LEX_ERROR'
+
+# ** constant: parse_error_id
+PARSE_ERROR_ID = 'PARSE_ERROR'
+
+# ** constant: reader_build_failed_id
+READER_BUILD_FAILED_ID = 'READER_BUILD_FAILED'
+
+# ** constant: action_execution_failed_id
+ACTION_EXECUTION_FAILED_ID = 'ACTION_EXECUTION_FAILED'

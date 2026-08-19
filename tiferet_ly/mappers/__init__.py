@@ -27,6 +27,9 @@ from .grammar import (
 from .ast import (
     AstNodeAggregate,
 )
+from .lexeme import (
+    LexemeAggregate,
+)
 
 # *** exports
 
@@ -45,4 +48,5 @@ __all__ = [
     'GrammarAggregate',
     'GrammarConfigObject',
     'AstNodeAggregate',
+    'LexemeAggregate',
 ]

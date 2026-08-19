@@ -1,0 +1,37 @@
+services:
+  token_service:
+    module_path: tiferet_ly.repos.token
+    class_name: TokenConfigRepository
+    parameters:
+      token_config: tokens.yml
+  production_service:
+    module_path: tiferet_ly.repos.production
+    class_name: ProductionConfigRepository
+    parameters:
+      production_config: productions.yml
+  grammar_service:
+    module_path: tiferet_ly.repos.grammar
+    class_name: GrammarConfigRepository
+    parameters:
+      grammar_config: grammars.yml
+  lexer_service:
+    module_path: tiferet_ly.utils.lex
+    class_name: PlyLexer
+  parser_service:
+    module_path: tiferet_ly.utils.parse
+    class_name: PlyParser
+  list_tokens:
+    module_path: tiferet_ly.events.token
+    class_name: ListTokens
+  list_productions:
+    module_path: tiferet_ly.events.production
+    class_name: ListProductions
+  list_grammars:
+    module_path: tiferet_ly.events.grammar
+    class_name: ListGrammars
+  lex_text:
+    module_path: tiferet_ly.events.lex
+    class_name: LexText
+  parse_text:
+    module_path: tiferet_ly.events.parse
+    class_name: ParseText

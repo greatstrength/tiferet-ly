@@ -19,6 +19,9 @@ from .grammar import (
 from .ast import (
     AstNode,
 )
+from .lexeme import (
+    Lexeme,
+)
 
 # *** exports
 
@@ -31,4 +34,5 @@ __all__ = [
     'ComplexProductionRule',
     'Grammar',
     'AstNode',
+    'Lexeme',
 ]
