@@ -110,3 +110,38 @@ class AstNodeAggregate(AstNode, Aggregate):
 
         # Update the payload; validate_assignment=True handles re-validation.
         self.value = value
+
+    # * method: format
+    def format(self, indent: str = '', indent_step: str = '  ') -> str:
+        '''
+        Render this node as indented text, omitting source span.
+
+        :param indent: Leading whitespace for this node.
+        :type indent: str
+        :param indent_step: Extra indent applied to each child.
+        :type indent_step: str
+        :return: The deterministic indented rendering.
+        :rtype: str
+        '''
+
+        # A leaf is one line: kind, plus the value when it is set.
+        if not self.children and self.value is not None:
+            line = f'{indent}{self.kind} {self.value}'
+        else:
+            line = f'{indent}{self.kind}'
+
+        # An internal node is its kind, then each child one indent deeper.
+        if not self.children:
+            return line
+
+        # Recurse through child aggregates so the tree formats itself.
+        child_text = [
+            child.format(
+                indent=indent + indent_step,
+                indent_step=indent_step,
+            )
+            for child in self.children
+        ]
+
+        # Join this line with the formatted children.
+        return '\n'.join([line] + child_text)
