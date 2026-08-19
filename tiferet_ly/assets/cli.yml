@@ -1,0 +1,19 @@
+cli:
+  cmds:
+    parse:
+      default:
+        group_key: parse
+        key: default
+        name: Parse
+        description: Parse text against a declared grammar.
+        args:
+          - name_or_flags:
+              - grammar_id
+            description: The target grammar identifier.
+          - name_or_flags:
+              - text
+            description: The source text to parse.
+          - name_or_flags:
+              - --render-result
+            type: bool
+            description: Render the parse result as a string.

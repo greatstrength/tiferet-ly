@@ -18,6 +18,13 @@ features:
     default:
       name: Parse
       description: Parse text against a declared grammar.
+      params_schema:
+        grammar_id: str
+        text: str
+        render_result:
+          type: bool
+          required: false
+          default: false
       steps:
         - *list_tokens
         - &list_productions
@@ -27,3 +34,14 @@ features:
         - *list_grammars
         - service_id: parse_text
           name: Assemble parser and parse
+          data_key: result
+        - service_id: render_result
+          name: Render parse result
+          condition: $r.render_result
+          parameters:
+            result: $r.result
+        - service_id: return_result
+          name: Return parse result
+          condition: not $r.render_result
+          parameters:
+            result: $r.result
