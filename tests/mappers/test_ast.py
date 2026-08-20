@@ -3,7 +3,11 @@
 # *** imports
 
 # ** app
-from tiferet_ly.mappers.ast import AstNodeAggregate
+from tiferet_ly.mappers.ast import (
+    DEFAULT_FORMAT_INDENT,
+    DEFAULT_FORMAT_INDENT_STEP,
+    AstNodeAggregate,
+)
 
 # *** tests
 
@@ -70,6 +74,8 @@ def test_ast_node_aggregate_format_leaf_and_parent() -> None:
     assert left.format() == 'num 1'
     assert rendered == 'add\n  num 1\n  num 2'
     assert empty.format() == 'expr'
+    assert DEFAULT_FORMAT_INDENT == ''
+    assert DEFAULT_FORMAT_INDENT_STEP == '  '
     assert 'lineno' not in rendered
     assert 'lexpos' not in rendered
 

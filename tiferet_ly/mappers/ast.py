@@ -9,6 +9,14 @@ from typing import Any, List, Optional
 from tiferet import Aggregate
 from ..domain.ast import AstNode
 
+# *** constants
+
+# ** constant: default_format_indent
+DEFAULT_FORMAT_INDENT = ''
+
+# ** constant: default_format_indent_step
+DEFAULT_FORMAT_INDENT_STEP = '  '
+
 # *** mappers
 
 # ** mapper: ast_node_aggregate
@@ -112,7 +120,10 @@ class AstNodeAggregate(AstNode, Aggregate):
         self.value = value
 
     # * method: format
-    def format(self, indent: str = '', indent_step: str = '  ') -> str:
+    def format(
+            self,
+            indent: str = DEFAULT_FORMAT_INDENT,
+            indent_step: str = DEFAULT_FORMAT_INDENT_STEP) -> str:
         '''
         Render this node as indented text, omitting source span.
 

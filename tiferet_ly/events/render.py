@@ -14,46 +14,31 @@ from ..utils.render import ResultRenderer
 # ** event: render_result
 class RenderResult(DomainEvent):
     '''
-    Thin Feature step that turns a parse result into a string.
+    Thin Feature step that optionally turns a parse result into a string.
     '''
 
     # * method: execute
     @DomainEvent.parameters_required(['result'])
-    def execute(self, result: Any, **kwargs) -> str:
+    def execute(self,
+            result: Any,
+            render_result: bool = False,
+            **kwargs) -> Any:
         '''
-        Render the parse result as a string.
+        Render the parse result as a string when asked; otherwise pass it through.
 
         :param result: The raw parse result.
         :type result: Any
+        :param render_result: When true, return a string; otherwise the raw result.
+        :type render_result: bool
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
-        :return: The rendered string.
-        :rtype: str
-        '''
-
-        # Delegate string strategy to the renderer; do not walk the value here.
-        return ResultRenderer.render(result)
-
-
-# ** event: return_result
-class ReturnResult(DomainEvent):
-    '''
-    Thin Feature step that promotes the raw parse result to request.result.
-    '''
-
-    # * method: execute
-    @DomainEvent.parameters_required(['result'])
-    def execute(self, result: Any, **kwargs) -> Any:
-        '''
-        Return the parse result unchanged.
-
-        :param result: The raw parse result.
-        :type result: Any
-        :param kwargs: Additional keyword arguments.
-        :type kwargs: dict
-        :return: The same result.
+        :return: The rendered string, or the unchanged result.
         :rtype: Any
         '''
 
-        # Promote $r.result onto request.result without converting it.
-        return result
+        # Pass the raw value through when the caller did not ask to render.
+        if not render_result:
+            return result
+
+        # Delegate string strategy to the renderer; do not walk the value here.
+        return ResultRenderer.render(result)
