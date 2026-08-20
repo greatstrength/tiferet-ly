@@ -38,6 +38,3 @@ services:
   render_result:
     module_path: tiferet_ly.events.render
     class_name: RenderResult
-  return_result:
-    module_path: tiferet_ly.events.render
-    class_name: ReturnResult

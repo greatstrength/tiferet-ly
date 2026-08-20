@@ -37,11 +37,6 @@ features:
           data_key: result
         - service_id: render_result
           name: Render parse result
-          condition: $r.render_result
           parameters:
             result: $r.result
-        - service_id: return_result
-          name: Return parse result
-          condition: not $r.render_result
-          parameters:
-            result: $r.result
+            render_result: $r.render_result
