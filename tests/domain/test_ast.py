@@ -77,3 +77,16 @@ def test_ast_node_forbids_extra_fields() -> None:
     # An unrecognized field is rejected.
     with pytest.raises(ValidationError):
         AstNode(kind='num', col=2)
+
+
+# ** test: ast_node_has_no_format
+def test_ast_node_has_no_format() -> None:
+    '''
+    Test that domain AstNode does not expose format.
+    '''
+
+    # Construct a bare domain node.
+    node = AstNode(kind='num', value=1)
+
+    # Assert format lives only on the aggregate.
+    assert not hasattr(node, 'format')

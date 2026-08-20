@@ -3,7 +3,11 @@
 # *** imports
 
 # ** app
-from tiferet_ly.mappers.ast import AstNodeAggregate
+from tiferet_ly.mappers.ast import (
+    DEFAULT_FORMAT_INDENT,
+    DEFAULT_FORMAT_INDENT_STEP,
+    AstNodeAggregate,
+)
 
 # *** tests
 
@@ -47,6 +51,34 @@ def test_ast_node_aggregate_mutators() -> None:
     # Assert the mutators updated the fields.
     assert node.children == [child]
     assert node.value == 'kept'
+
+# ** test: ast_node_aggregate_format_leaf_and_parent
+def test_ast_node_aggregate_format_leaf_and_parent() -> None:
+    '''
+    Test that format renders a leaf and a parent with two children.
+    '''
+
+    # Construct a parent whose children are valued leaves.
+    left = AstNodeAggregate.leaf('num', 1, lineno=1, lexpos=0)
+    right = AstNodeAggregate.leaf('num', 2, lineno=1, lexpos=2)
+    node = AstNodeAggregate.new(
+        'add',
+        children=[left, right],
+        lineno=1,
+        lexpos=0,
+    )
+    empty = AstNodeAggregate.new('expr')
+
+    # Assert indented text and that span fields are omitted.
+    rendered = node.format()
+    assert left.format() == 'num 1'
+    assert rendered == 'add\n  num 1\n  num 2'
+    assert empty.format() == 'expr'
+    assert DEFAULT_FORMAT_INDENT == ''
+    assert DEFAULT_FORMAT_INDENT_STEP == '  '
+    assert 'lineno' not in rendered
+    assert 'lexpos' not in rendered
+
 
 # ** test: no_ast_alias_or_persistence_surface
 def test_no_ast_alias_or_persistence_surface() -> None:

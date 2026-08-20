@@ -12,6 +12,7 @@ import yaml
 # ** app
 from tiferet import App
 from tiferet.interfaces.core import ServiceError
+from tiferet_ly.mappers.ast import AstNodeAggregate
 from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.mappers.lexeme import LexemeAggregate
 from tiferet_ly.mappers.production import (
@@ -463,9 +464,15 @@ def test_ply_import_is_isolated() -> None:
     import tiferet_ly.events.lex as lex_events
     import tiferet_ly.events.parse as parse_events
 
-    # Assert ply is absent from the event modules.
+    # Import the render events added by RFP-008 as well.
+    import tiferet_ly.events.render as render_events
+    import tiferet_ly.utils.render as render_util
+
+    # Assert ply is absent from the event modules and the renderer.
     assert 'ply' not in lex_events.__dict__
     assert 'ply' not in parse_events.__dict__
+    assert 'ply' not in render_events.__dict__
+    assert 'ply' not in render_util.__dict__
 
 
 # ** test: features_lex_and_parse_arithmetic
@@ -577,3 +584,134 @@ def test_features_lex_and_parse_arithmetic(tmp_path, monkeypatch) -> None:
     assert lexemes[0].lineno == 1
     assert lexemes[0].lexpos == 0
     assert value == 3
+    assert type(value) is int
+
+    # The same Feature with the flag off or omitted stays an int; on becomes str.
+    omitted = app.run('parse.default', data={'grammar_id': 'arith', 'text': '1+2'})
+    flagged_off = app.run(
+        'parse.default',
+        data={'grammar_id': 'arith', 'text': '1+2', 'render_result': False},
+    )
+    flagged_on = app.run(
+        'parse.default',
+        data={'grammar_id': 'arith', 'text': '1+2', 'render_result': True},
+    )
+    assert omitted == 3
+    assert flagged_off == 3
+    assert flagged_on == '3'
+    assert isinstance(flagged_on, str)
+
+
+# ** test: parse_feature_renders_ast_node_aggregate
+def test_parse_feature_renders_ast_node_aggregate(tmp_path, monkeypatch) -> None:
+    '''
+    Test that parse with render_result True returns an $ast format string.
+    '''
+
+    # Write a catalogue whose start action builds an AstNodeAggregate.
+    tokens_path = tmp_path / 'tokens.yml'
+    productions_path = tmp_path / 'productions.yml'
+    grammars_path = tmp_path / 'grammars.yml'
+    tokens_path.write_text(
+        yaml.safe_dump({
+            'tokens': [
+                {'NUMBER': {
+                    'grammar_id': 'arith',
+                    'pattern': r'\d+',
+                    'action': 't.value = int(t.value)\nreturn t',
+                }},
+                {'PLUS': {
+                    'grammar_id': 'arith',
+                    'pattern': r'\+',
+                }},
+                {'WS': {
+                    'grammar_id': 'arith',
+                    'pattern': r'\s+',
+                    'action': 'return None',
+                }},
+            ],
+        }),
+        encoding='utf-8',
+    )
+    productions_path.write_text(
+        yaml.safe_dump({
+            'production_rules': [
+                {'expr': {
+                    'grammar_id': 'arith',
+                    'spec': 'expr : expr PLUS term',
+                    'action': "p[0] = $ast.new('add', [p[1], p[3]])",
+                }},
+                {'expr': {
+                    'grammar_id': 'arith',
+                    'spec': 'expr : term',
+                }},
+                {'term': {
+                    'grammar_id': 'arith',
+                    'spec': 'term : NUMBER',
+                    'action': "p[0] = $ast.leaf('num', p[1])",
+                }},
+            ],
+        }),
+        encoding='utf-8',
+    )
+    grammars_path.write_text(
+        yaml.safe_dump({
+            'grammars': {
+                'arith': {
+                    'parent_ids': [],
+                    'start': 'expr',
+                },
+            },
+        }),
+        encoding='utf-8',
+    )
+
+    # Point DI catalogue paths at the temporary files.
+    assets = Path(__file__).resolve().parents[2] / 'tiferet_ly' / 'assets'
+    di_path = tmp_path / 'di.yml'
+    di_path.write_text(
+        (assets / 'di.yml').read_text(encoding='utf-8')
+        .replace('token_config: tokens.yml', f'token_config: {tokens_path}')
+        .replace(
+            'production_config: productions.yml',
+            f'production_config: {productions_path}',
+        )
+        .replace('grammar_config: grammars.yml', f'grammar_config: {grammars_path}'),
+        encoding='utf-8',
+    )
+    app_path = tmp_path / 'app.yml'
+    app_path.write_text(
+        (assets / 'app.yml').read_text(encoding='utf-8')
+        .replace(
+            'logging_config: tiferet_ly/assets/app.yml',
+            f'logging_config: {assets / "app.yml"}',
+        )
+        .replace(
+            'di_config: tiferet_ly/assets/di.yml',
+            f'di_config: {di_path}',
+        )
+        .replace(
+            'error_config: tiferet_ly/assets/error.yml',
+            f'error_config: {assets / "error.yml"}',
+        )
+        .replace(
+            'feature_config: tiferet_ly/assets/feature.yml',
+            f'feature_config: {assets / "feature.yml"}',
+        ),
+        encoding='utf-8',
+    )
+    monkeypatch.chdir(tmp_path)
+
+    # Parse once raw and once rendered.
+    app = App('tiferet_ly', app_config=str(app_path))
+    tree = app.run('parse.default', data={'grammar_id': 'arith', 'text': '1+2'})
+    rendered = app.run(
+        'parse.default',
+        data={'grammar_id': 'arith', 'text': '1+2', 'render_result': True},
+    )
+
+    # Assert the flag-off path is the object and the flag-on path is format().
+    assert isinstance(tree, AstNodeAggregate)
+    assert rendered == tree.format()
+    assert rendered == 'add\n  num 1\n  num 2'
+    assert isinstance(rendered, str)
