@@ -1,0 +1,19 @@
+production_rules:
+  - expr:
+      grammar_id: arith
+      spec: 'expr : expr PLUS term'
+      action: "p[0] = $ast.new('add', [p[1], p[3]])"
+  - expr:
+      grammar_id: arith
+      spec: 'expr : term'
+  - term:
+      grammar_id: arith
+      spec: 'term : term TIMES factor'
+      action: "p[0] = $ast.new('mul', [p[1], p[3]])"
+  - term:
+      grammar_id: arith
+      spec: 'term : factor'
+  - factor:
+      grammar_id: arith
+      spec: 'factor : NUMBER'
+      action: "p[0] = $ast.leaf('num', p[1])"

@@ -1,0 +1,25 @@
+sessions:
+  tiferet_ly:
+    name: Tiferet-Ly
+    description: Declared lex and parse features
+    services:
+      logging_service:
+        module_path: tiferet.repos.logging
+        class_name: LoggingConfigRepository
+        params:
+          logging_config: configs/app.yml
+      di_service:
+        module_path: tiferet.repos.di
+        class_name: DIConfigRepository
+        params:
+          di_config: configs/di.yml
+      error_service:
+        module_path: tiferet.repos.error
+        class_name: ErrorConfigRepository
+        params:
+          error_config: configs/error.yml
+      feature_service:
+        module_path: tiferet.repos.feature
+        class_name: FeatureConfigRepository
+        params:
+          feature_config: configs/feature.yml

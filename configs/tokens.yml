@@ -1,0 +1,17 @@
+tokens:
+  - NUMBER:
+      grammar_id: arith
+      pattern: '\d+'
+      action: |-
+        t.value = int(t.value)
+        return t
+  - PLUS:
+      grammar_id: arith
+      pattern: '\+'
+  - TIMES:
+      grammar_id: arith
+      pattern: '\*'
+  - WS:
+      grammar_id: arith
+      pattern: '\s+'
+      action: return None

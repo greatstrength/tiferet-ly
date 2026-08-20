@@ -1,0 +1,26 @@
+errors:
+  GRAMMAR_NOT_FOUND:
+    name: Grammar Not Found
+    message:
+      - lang: en_US
+        text: "Grammar not found: {grammar_id}."
+  LEX_ERROR:
+    name: Lex Error
+    message:
+      - lang: en_US
+        text: "Illegal character at line {lineno} position {lexpos}: {value}."
+  PARSE_ERROR:
+    name: Parse Error
+    message:
+      - lang: en_US
+        text: "Syntax error in grammar {grammar_id}."
+  READER_BUILD_FAILED:
+    name: Reader Build Failed
+    message:
+      - lang: en_US
+        text: "Reader build failed for grammar {grammar_id}."
+  ACTION_EXECUTION_FAILED:
+    name: Action Execution Failed
+    message:
+      - lang: en_US
+        text: "Action execution failed for grammar {grammar_id}."
