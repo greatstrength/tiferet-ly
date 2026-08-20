@@ -11,8 +11,22 @@ pattern becomes an edit to the declaration rather than a new function buried
 in a growing file, and the pieces around it can be tested without invoking
 the real parsing engine at all.
 
+## How it works
+tiferet-ly runs every declared language through the same four-step
+journey: **declare** a language's words and sentence patterns as YAML
+catalogues (`tokens`, `productions`, `grammars`); **translate** each
+declared rule into the literal function or string PLY's own conventions
+require; **assemble** a lexer and parser for one grammar's effective rule
+set; **read** text written in that language and hand back a structured
+result — optionally a small, generic `AstNode` tree, rendered as a string
+on request.
+
+See [Quick Start](docs/quick-start.md) for a runnable, worked example (a
+small calculator language) that walks through all four steps against the
+checked-in `configs/` example application.
+
 ## Documentation
-This project has no implementation yet. Before writing code, start with:
+- [Quick Start](docs/quick-start.md) — a runnable, end-to-end example.
 - [Domain Vision Statement](docs/domain-vision.md) — what tiferet-ly is for
   and the value it aims to provide.
 - [Core Domain Distillation](docs/core-domain-distillation.md) — the

@@ -1,0 +1,4 @@
+grammars:
+  arith:
+    parent_ids: []
+    start: expr
