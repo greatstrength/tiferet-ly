@@ -56,11 +56,13 @@ same reading machinery, rather than a reason to write a new one from
 scratch.
 
 **Complexity stays where it's earned.** Most words and sentence patterns in
-a small language are simple to recognize and need no special handling; a few
-need a bit of custom logic to do something useful once recognized.
-Tiferet-Ly keeps those two cases separate, so a simple rule stays a one-line
+a small language are simple to recognize and need no special handling; a
+few need a bit of custom logic to do something useful once recognized; and
+some words aren't recognized from the text at all — they're structural
+signals a reader adds on its own, like where a block starts or ends.
+Tiferet-Ly keeps those cases separate, so a simple rule stays a one-line
 declaration and never has to carry the extra weight that only the
-complicated rules actually need.
+complicated — or the purely structural — rules actually need.
 
 **A tree is available, never required.** Some languages want the reader to
 hand back a tree of recognized sentences; some just want a number or a list.

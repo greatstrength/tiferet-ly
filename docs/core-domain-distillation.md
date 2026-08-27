@@ -34,7 +34,9 @@ and four axes of variation:
 1. **Rule complexity** — whether a single word or sentence rule is pure
    declaration (a pattern, nothing else) or carries a small piece of
    executable logic alongside its pattern. This axis applies independently
-   on both the lexical and the syntactic side.
+   on both the lexical and the syntactic side, and only to a rule that
+   carries a pattern at all — a synthetic token rule (Section 3) has no
+   pattern and sits outside this axis entirely.
 2. **Lexical vs. syntactic** — whether a rule governs how raw characters are
    grouped into words, or how a sequence of already-recognized words is
    accepted as a valid sentence. The two sides share the complexity axis
@@ -56,8 +58,12 @@ word-recognition and sentence-recognition work. Not part of this domain;
 treated as infrastructure whose conventions cannot be renegotiated.
 
 **Token rule** — a declaration of how one *kind* of word is recognized: a
-name, and either a raw pattern or a pattern plus an action. Distinct from
-the recognized instance itself (a lexeme).
+name, and either a raw pattern, a pattern plus an action, or — for a
+**synthetic** token rule — no pattern at all. A synthetic token rule names
+a kind of word the engine itself never matches; it exists so a stream
+transform can label an injected lexeme with a name completeness (Section
+4) and a production can both recognize. Distinct from the recognized
+instance itself (a lexeme).
 
 **Lexeme** — one recognized word: a name, a payload, and a source span
 (line and position). It is what reading produces on the lexical side. It
@@ -80,9 +86,15 @@ tree node, or whatever else the language wants. It is part of the
 declaration, compiled when the rule is translated.
 
 **Grammar** — a named composition node for one declared language or
-dialect: an identity, an ordered list of parent grammars it extends, and
-the start-symbol production a reader begins from. A grammar does not
-contain its rules. Each rule names the one grammar it belongs to.
+dialect: an identity, an ordered list of parent grammars it extends, the
+start-symbol production a reader begins from, and a small set of
+grammar-own lexical facts — a bare ignore pattern the engine skips before
+any rule, and an optional layout profile (below) describing how this
+grammar's own stream should be shaped. A grammar does not contain its
+rules. Each rule names the one grammar it belongs to. Unlike the rule
+catalogues, a grammar's own facts do not compose across `parent_ids`: a
+dialect that wants its parent's ignore pattern or layout profile repeats
+it (Section 7).
 
 **Grammar composition** — the relationship among grammars. A grammar may
 extend one or more parents. Walking parents in declared order, recording
@@ -90,6 +102,13 @@ each grammar the first time it is reached, and treating the target grammar
 as most precedent, yields one effective ancestor set. Between two
 unrelated parents, the later-declared one wins ties; a rule the target
 declares itself overrides a same-named rule an ancestor declared.
+
+**Layout profile** — an optional, grammar-own declaration of which
+already-recognized token names introduce a block, which pair up as open
+and close delimiters, which names a line break, and which two synthetic
+token names a post-lex filter should inject as a block opens or closes.
+It is data, not a subclass: one filter mechanism runs for every declared
+language, shaped only by what a grammar's own profile names.
 
 **Declared language** — the three catalogues taken together: grammars,
 token rules, and productions. This is what a consumer writes. It is the
@@ -128,10 +147,10 @@ add a fourth declared catalogue of node kinds.
 ## 4. What the domain reads / operates on
 The declared language is the domain's primary input. It names three
 catalogues — grammars, token rules, and productions. Within the rule
-catalogues, a given entry is either simple or complex. Rules are flat:
-order in the catalogue is the order they were declared, and a rule's
-grammar membership is a tag on the rule, not a container the grammar
-holds.
+catalogues, a given entry is simple, complex, or — for a token rule
+only — synthetic. Rules are flat: order in the catalogue is the order
+they were declared, and a rule's grammar membership is a tag on the rule,
+not a container the grammar holds.
 
 Two engine-imposed conventions give this input its leverage, and any
 declaration format the domain adopts has to respect them rather than paper
@@ -142,14 +161,19 @@ engine validates every token-rule name it finds against a single, fully
 populated list of every token name the language uses. A grammar is
 therefore only ever meaningful as a whole — including whatever its parents
 contribute. Assembling a reader from a partial declaration is not a
-smaller version of the same behavior; it is an unsupported one.
+smaller version of the same behavior; it is an unsupported one. A
+synthetic token rule satisfies this same requirement by name alone — it
+never has a pattern the engine could match, only a place on the list a
+production is allowed to reference.
 
 **Rule order carries meaning on the lexical side that it does not carry on
 the syntactic side.** The engine matches function-based token rules in the
 order they are presented, and only sorts pattern-only token rules by
 longest-pattern-first. Quietly reordering a complex token rule relative to
 a simple one during translation would change what the reader accepts,
-silently. Productions carry no equivalent ordering constraint from the
+silently. A synthetic token rule is exempt from this constraint: the
+engine never attempts to match it, so its position in the catalogue is
+inert. Productions carry no equivalent ordering constraint from the
 engine itself. Their disambiguation, when a language needs it, is a
 separate concern — precedence and associativity — which this domain
 currently leaves absent rather than stubbed. Composition of grammars is
@@ -168,13 +192,14 @@ declared language; what varies is only what has been declared to it.
 ### 5.1 Declaring a language
 *Turn a declared language into validated domain objects.*
 
-Accept the three catalogues, branch each rule on the complexity axis, and
-produce an in-memory language ready for translation. A grammar is checked
-only for its own shape — identity, parents, start symbol — not for whether
-those parents exist, whether they form a cycle, or whether the start
-symbol names a production. Those questions require the catalogues
-together, and belong to whoever writes a grammar, not to a grammar in
-isolation.
+Accept the three catalogues, branch each token rule on whether it is
+simple, complex, or synthetic (a production only ever branches on simple
+versus complex), and produce an in-memory language ready for translation.
+A grammar is checked only for its own shape — identity, parents, start
+symbol, ignore pattern, layout profile — not for whether those parents
+exist, whether they form a cycle, or whether the start symbol names a
+production. Those questions require the catalogues together, and belong
+to whoever writes a grammar, not to a grammar in isolation.
 
 **Verdict:** agnostic to the declared-language axis — this step's job is
 exactly to accept any language's vocabulary and grammar. Variable only in
@@ -191,17 +216,22 @@ and whose body runs the declared action. Before that body is compiled,
 action shorthand in the fragment is rewritten from the rewrite table and
 the named factories are bound, so a declaration can name a tree — or its
 own types — without importing them. A simple production still becomes a
-pass-through of its single part, and is never auto-wrapped as a tree.
+pass-through of its single part, and is never auto-wrapped as a tree. A
+synthetic token rule translates to nothing at all — no value, no
+callable — beyond the bare name it already contributed to the engine's
+token list; there is no third engine-facing shape to satisfy, only a name
+to register.
 
 This is the step where a declarer's intent becomes something that
 satisfies a third-party convention, and the step most exposed to the
 engine's own constraints from Section 4.
 
-**Verdict:** this is where the rule-complexity axis lives. Translation
-must remain agnostic to the lexical-vs-syntactic *ordering* constraint
-even though the two sides use different engine-facing conventions, and
-agnostic to which language declared the rule and which factories that
-language bound.
+**Verdict:** this is where the rule-complexity axis lives, including a
+synthetic token rule's exemption from it — translating one is a
+deliberate no-op beyond registering its name. Translation must remain
+agnostic to the lexical-vs-syntactic *ordering* constraint even though the
+two sides use different engine-facing conventions, and agnostic to which
+language declared the rule and which factories that language bound.
 
 ### 5.3 Assembling a reader
 *Turn a complete, already-translated rule set into a built lexer and
@@ -214,6 +244,15 @@ Productions that share a name are alternatives and all survive. Then
 satisfy completeness (the full token list, not a partial one) and hand the
 translated rules to the engine. The engine itself stays behind a boundary
 this domain owns, so nothing above assembly imports it directly.
+
+A grammar's own facts — its ignore pattern and its layout profile — are
+not part of that ancestry walk. They are read directly off the *target*
+grammar, exactly as its start symbol already is; composition resolves
+which rules are in scope, never which grammar-own facts apply. An ignore
+pattern is engine-facing and installed once, directly, alongside the
+translated rules. A layout profile is not installed into the engine at
+all — it configures the post-lex filter that shapes the reader's output
+after the engine has already run (Section 5.4).
 
 Produces: a reader, or a failure naming which declared rule the engine
 rejected and why.
@@ -228,14 +267,29 @@ grammar and its parents.
 *Run a built reader against a piece of text and hand back a structured
 result.*
 
-The assembled parser drives the assembled lexer, as the engine normally
-does. The result is whatever the declaration's own actions constructed
-along the way — any shape, including an AstNode if an action built one —
-or a recognition failure naming the same span a lexeme carries.
+Reading has two shapes, not one. A parse-driven read is the one already
+described: the assembled parser drives the assembled lexer, as the engine
+normally does, and the result is whatever the declaration's own actions
+constructed along the way — any shape, including an AstNode if an action
+built one — or a recognition failure naming the same span a lexeme
+carries. A lexeme-only read runs the assembled lexer to exhaustion and
+hands back the recognized lexeme stream directly, with no parser and no
+declared action involved at all.
+
+When the target grammar declared a layout profile, a lexeme-only read
+gains one more step before it hands anything back: a stateless filter
+walks the engine's own lexeme stream and, using only the names the
+profile declares, injects the two synthetic lexemes an
+indentation-sensitive language needs and drops a suppressed newline while
+delimiter depth is open. The filter never re-matches text and never
+consults the engine again; it only reshapes a stream the engine already
+produced. A grammar with no layout profile is read exactly as before.
 
 **Verdict:** agnostic to all four axes. Reading text looks identical no
 matter which language was declared, how any rule was shaped, or which
-grammars were composed.
+grammars were composed — including whether a lexeme-only read's output
+was reshaped by a layout filter, since that reshaping is driven entirely
+by what the target grammar declared, never by which language it is.
 
 ## 6. How the behaviors compose
 Declare, translate, and assemble run once per target grammar, producing a
@@ -261,13 +315,22 @@ what the actions built.
 Token rules, productions, and grammars are independent. A grammar does not
 own its rules; a rule names its grammar. That independence is what makes
 composition a filter rather than a container walk, and what keeps the
-complexity axis from being entangled with the composition axis.
+complexity axis from being entangled with the composition axis. A
+grammar's own facts — start symbol, ignore pattern, layout profile — are a
+different kind of ownership entirely: not rules the grammar contains, but
+scalar values the grammar carries about itself, read once at assembly
+(ignore) or once per lexeme-only read (layout), never filtered or
+composed the way a rule catalogue is.
 
 Translation depends on a rule's own fields and on the rewrite table. It
 does not depend on which grammar the rule belongs to. Assembly depends on
 the three catalogues together — that is the first step that is allowed to
-know a grammar's parents and a language's full token list. Reading depends
-only on a reader and a piece of text.
+know a grammar's parents and a language's full token list — and, for an
+ignore pattern, on the target grammar's own declared value. A
+parse-driven read depends only on a reader and a piece of text. A
+lexeme-only read depends on the reader, the text, and — when the target
+grammar declared one — its layout profile, since that is what the
+post-lex filter runs against.
 
 The one relationship this domain adds that a typical Tiferet component
 does not have is a dependency on a specific piece of *external, un-owned*
@@ -290,20 +353,28 @@ mechanism.
 - The four-step pipeline itself.
 - Reading text against an already-assembled reader.
 - Reader assembly, once rules have been translated.
-- The rule-complexity branch in translation, as a mechanism: simple and
-  complex rules are always translated by the same two paths.
+- The rule-complexity branch in translation, as a mechanism: simple,
+  complex, and synthetic token rules are always translated by the same
+  three paths (the synthetic path being a deliberate no-op beyond
+  registering a name).
 - The rewrite-table mechanism: one mapping, applied the same way for every
   language.
 - The optional generic tree node, as a type: any language that wants a
   tree and does not already own one uses the same node.
+- The layout-filter mechanism, when a grammar declares a profile: one
+  stateless stream transform, applied the same way for every language,
+  shaped only by the token names that language's own profile names.
 
 **Variable — one definition per declared language:**
 - The token and production catalogues: which words and sentence patterns
   exist at all.
-- Which individual rules are simple versus complex, and what a complex
-  rule's action actually does.
+- Which individual rules are simple, complex, or synthetic, and what a
+  complex rule's action actually does.
 - Which grammars exist, which parents each extends, and which start
   symbol a reader begins from.
+- Whether any grammar declares an ignore pattern or a layout profile at
+  all, and which already-recognized token names a declared profile points
+  at as block, delimiter, or newline tokens.
 - Whatever structured result a language's actions choose to build. There
   is no required shape. A language that already owns a tree binds its own
   factories as extra rewrite-table rows.
@@ -332,8 +403,10 @@ mechanism.
 grammar, and composition; translating that declaration into the engine's
 required shape, including compiling an action and rewriting any shorthand
 it contains; selecting a grammar's effective rule set; assembling a
-working reader; running that reader against text; and offering — without
-requiring — a generic tree node a language may build.
+working reader; running that reader against text; shaping a recognized
+lexeme stream according to a grammar's own declared layout profile, when
+one exists; and offering — without requiring — a generic tree node a
+language may build.
 
 **Outside the domain:**
 - What a specific language's words and sentences *mean*, what a
@@ -354,7 +427,13 @@ The seams this distillation makes visible, each independently scopeable:
 1. **Keep declaration, translation, assembly, and reading on the shapes
    above** — three independent catalogues, composition as a filter,
    translation per rule and language-agnostic, assembly the first place
-   the catalogues meet, reading untyped.
+   the catalogues meet, reading untyped. The synthetic token-rule shape
+   and the Grammar-own ignore/layout facts specified by TLY1-RFP-010
+   (issue #23) extend this shape without breaking it: a synthetic token
+   is still a catalogue entry translated by the same per-rule mechanism
+   (Section 5.2), and a layout profile only ever reads already-recognized
+   token names — it declares nothing the engine itself needs to know
+   about.
 2. **Treat the optional tree as a convenience, not a contract.** Rendering
    or walking a result must not assume every successful read produced an
    AstNode.
