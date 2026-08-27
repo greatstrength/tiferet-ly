@@ -16,6 +16,7 @@ from ..mappers.production import (
 )
 from ..mappers.token import (
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
     TokenRuleAggregate,
 )
 
@@ -176,17 +177,24 @@ class RuleTranslator:
     @classmethod
     def translate_token_rule(cls,
                              rule: TokenRuleAggregate,
-                             rewrites: Optional[Dict[str, type]] = None) -> Tuple[str, Union[str, Callable]]:
+                             rewrites: Optional[Dict[str, type]] = None) -> Optional[Tuple[str, Union[str, Callable]]]:
         '''
         Translate one token rule into a PLY t_* attribute pair.
+
+        A synthetic rule has no pattern to validate or install; it
+        translates to nothing for PLY, before any regex compilation runs.
 
         :param rule: The token rule to translate.
         :type rule: TokenRuleAggregate
         :param rewrites: Optional extra or overriding shorthand bindings.
         :type rewrites: Optional[Dict[str, type]]
-        :return: The prefixed attribute name and the pattern string or function.
-        :rtype: Tuple[str, Union[str, Callable]]
+        :return: The prefixed attribute name and the pattern string or function, or None for a synthetic rule.
+        :rtype: Optional[Tuple[str, Union[str, Callable]]]
         '''
+
+        # A synthetic rule contributes nothing to PLY; skip before any regex compilation.
+        if isinstance(rule, SyntheticTokenRuleAggregate):
+            return None
 
         # Reject a pattern that is not a valid regular expression before synthesis.
         try:

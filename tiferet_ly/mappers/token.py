@@ -13,6 +13,7 @@ from tiferet import TransferObject
 from ..domain.token import (
     ComplexTokenRule,
     SimpleTokenRule,
+    SyntheticTokenRule,
     TokenRule,
 )
 from .core import NamedRuleAggregate
@@ -74,15 +75,27 @@ class ComplexTokenRuleAggregate(ComplexTokenRule, TokenRuleAggregate):
         self.action = action
 
 
+# ** mapper: synthetic_token_rule_aggregate
+class SyntheticTokenRuleAggregate(SyntheticTokenRule, TokenRuleAggregate):
+    '''
+    Mutable aggregate for a synthetic token rule.
+
+    Carries no pattern or action mutators: a synthetic rule has nothing
+    beyond the name/grammar_id shared mutators on NamedRuleAggregate.
+    '''
+
+    pass
+
+
 # ** mapper: token_rule_config_object
 class TokenRuleConfigObject(TransferObject):
     '''
     Configuration data representation of a token rule.
 
     Deliberately does not subclass :class:`TokenRule`, whose base carries
-    no ``pattern``: a config entry must represent either variant before it
-    is known which one it is. ``.map()`` branches on ``action``'s presence
-    with no separate discriminator field.
+    no ``pattern``: a config entry must represent any of the three variants
+    before it is known which one it is. ``.map()`` branches on ``action``'s
+    and ``pattern``'s presence, with no separate discriminator field.
     '''
 
     # * attribute: _ROLES
@@ -108,8 +121,8 @@ class TokenRuleConfigObject(TransferObject):
     )
 
     # * attribute: pattern
-    pattern: str = Field(
-        ...,
+    pattern: Optional[str] = Field(
+        default=None,
         description='The regular expression pattern PLY matches this token against.',
     )
 
@@ -120,18 +133,22 @@ class TokenRuleConfigObject(TransferObject):
     )
 
     # * method: map
-    def map(self, **overrides) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]:
+    def map(self, **overrides) -> Union[
+            SimpleTokenRuleAggregate,
+            ComplexTokenRuleAggregate,
+            SyntheticTokenRuleAggregate]:
         '''
         Map the token rule configuration data to a token rule aggregate.
 
-        Branches on ``action``'s presence: a set action yields
-        :class:`ComplexTokenRuleAggregate`, otherwise
-        :class:`SimpleTokenRuleAggregate`.
+        Branches on ``action``'s and ``pattern``'s presence: a set action
+        yields :class:`ComplexTokenRuleAggregate`; a set pattern with no
+        action yields :class:`SimpleTokenRuleAggregate`; neither present
+        yields :class:`SyntheticTokenRuleAggregate`.
 
         :param overrides: Additional field overrides.
         :type overrides: dict
-        :return: The mapped simple or complex token rule aggregate.
-        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :return: The mapped simple, complex, or synthetic token rule aggregate.
+        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         '''
 
         # Serialize via the to_model role without dropping None fields so
@@ -148,11 +165,18 @@ class TokenRuleConfigObject(TransferObject):
                 action=data['action'],
             )
 
-        # Construct the simple aggregate otherwise (drop action if absent/None).
-        return SimpleTokenRuleAggregate(
+        # Construct the simple aggregate when a pattern is present with no action.
+        if data.get('pattern') is not None:
+            return SimpleTokenRuleAggregate(
+                name=data['name'],
+                grammar_id=data['grammar_id'],
+                pattern=data['pattern'],
+            )
+
+        # Construct the synthetic aggregate when neither pattern nor action is present.
+        return SyntheticTokenRuleAggregate(
             name=data['name'],
             grammar_id=data['grammar_id'],
-            pattern=data['pattern'],
         )
 
     # * method: from_model

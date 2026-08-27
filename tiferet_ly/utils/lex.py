@@ -12,6 +12,7 @@ from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate
 from ..mappers.token import TokenRuleAggregate
 from .core import PlyReader
+from .layout import LayoutFilter
 
 # *** utils
 
@@ -71,6 +72,10 @@ class PlyLexer(PlyReader, LexerService):
             raise
         except Exception as error:
             self.wrap_action_failure(grammar_id, error)
+
+        # Apply the grammar's declared layout profile, when it has one.
+        if grammar.layout is not None:
+            lexemes = LayoutFilter.apply(lexemes, grammar.layout, text)
 
         # Return the ply-free lexeme stream.
         return lexemes

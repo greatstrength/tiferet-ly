@@ -37,3 +37,30 @@ class LexemeAggregate(Lexeme, Aggregate):
             lineno=tok.lineno,
             lexpos=tok.lexpos,
         )
+
+    # * method: synthesize (static)
+    @staticmethod
+    def synthesize(type: str, lineno: int, lexpos: int, value: Any = None) -> 'LexemeAggregate':
+        '''
+        Construct a lexeme not copied off a real PLY token, e.g. an
+        indent/dedent a LayoutFilter injects after lexing.
+
+        :param type: The synthetic token type name.
+        :type type: str
+        :param lineno: The source line the synthetic lexeme is attributed to.
+        :type lineno: int
+        :param lexpos: The source position the synthetic lexeme is attributed to.
+        :type lexpos: int
+        :param value: The value carried by the synthetic lexeme, if any.
+        :type value: Any
+        :return: The constructed lexeme aggregate.
+        :rtype: LexemeAggregate
+        '''
+
+        # Construct a lexeme directly from the given span, with no PLY token behind it.
+        return LexemeAggregate(
+            type=type,
+            value=value,
+            lineno=lineno,
+            lexpos=lexpos,
+        )

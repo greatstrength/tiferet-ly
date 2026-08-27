@@ -17,6 +17,7 @@ from tiferet_ly.mappers.production import (
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 from tiferet_ly.mappers.ast import AstNodeAggregate
 from tiferet_ly.utils.translation import (
@@ -154,6 +155,19 @@ def test_translate_token_rule_simple_is_identity() -> None:
     assert attr_name == 't_PLUS'
     assert value == pattern
     assert value is pattern
+
+# ** test: translate_token_rule_synthetic_returns_none
+def test_translate_token_rule_synthetic_returns_none() -> None:
+    '''
+    Test that a synthetic token rule translates to None without calling re.compile.
+    '''
+
+    # Translate a synthetic INDENT token with no pattern.
+    rule = SyntheticTokenRuleAggregate(name='INDENT', grammar_id='arithmetic')
+    result = RuleTranslator.translate_token_rule(rule)
+
+    # Assert the translation is a bare None, not an attribute pair.
+    assert result is None
 
 # ** test: translate_token_rule_complex_synthesizes_function
 def test_translate_token_rule_complex_synthesizes_function() -> None:

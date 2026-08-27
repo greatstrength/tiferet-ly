@@ -63,3 +63,14 @@ class ComplexTokenRule(TokenRule):
         ...,
         description='An encoded source fragment that runs whenever the rule matches.',
     )
+
+# ** model: synthetic_token_rule
+class SyntheticTokenRule(TokenRule):
+    '''
+    A token rule with no pattern for PLY to match: a name-only catalogue
+    entry for a token a stream transform injects after lexing, never
+    installed as a PLY t_* attribute but still present in the assembled
+    reader's token list so a grammar can name it in a production.
+    '''
+
+    pass

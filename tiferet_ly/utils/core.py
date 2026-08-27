@@ -172,6 +172,10 @@ class PlyReader:
         '''
         Install selected token attributes onto a throwaway module.
 
+        A synthetic rule translates to None and is skipped here — it
+        contributes no t_* attribute, though its name is already present
+        in module.tokens via derive_tokens below.
+
         :param module: The module receiving tokens and t_* attrs.
         :type module: Any
         :param selected_tokens: Tokens in selected order.
@@ -185,10 +189,16 @@ class PlyReader:
 
         # Translate each token and bind callables onto the module they live in.
         for rule in selected_tokens:
-            attr_name, value = RuleTranslator.translate_token_rule(
+            translated = RuleTranslator.translate_token_rule(
                 rule,
                 rewrites=rewrites,
             )
+
+            # A synthetic rule translates to None; nothing to install for it.
+            if translated is None:
+                continue
+
+            attr_name, value = translated
             setattr(
                 module,
                 attr_name,
@@ -232,6 +242,10 @@ class PlyReader:
         sys.modules[module.__name__] = module
         self.install_token_attrs(module, selected, rewrites)
         module.t_error = self.bind_callable(module, 't_error', t_error)
+
+        # Install the declared ignore pattern as PLY's own t_ignore convention.
+        if grammar.ignore is not None:
+            module.t_ignore = grammar.ignore
 
         # Rebuild every call; never write a lextab.
         try:

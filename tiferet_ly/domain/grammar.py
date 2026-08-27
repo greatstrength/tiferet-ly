@@ -3,13 +3,14 @@
 # *** imports
 
 # ** core
-from typing import List
+from typing import List, Optional
 
 # ** infra
 from pydantic import Field
 
 # ** app
 from tiferet.domain.core import DomainObject
+from .layout import LayoutProfile
 
 # *** models
 
@@ -57,5 +58,27 @@ class Grammar(DomainObject):
             "The start symbol, naming a production in this grammar's "
             'resolved, ancestor-composed production set. Not validated '
             'against any production catalogue at this layer.'
+        ),
+    )
+
+    # * attribute: ignore
+    ignore: Optional[str] = Field(
+        default=None,
+        description=(
+            "A bare regular-expression character class PLY skips before "
+            'attempting any token rule, installed as the literal t_ignore '
+            'module attribute PLY\'s own convention expects. Grammar-own, '
+            'like start: not composed across parent_ids.'
+        ),
+    )
+
+    # * attribute: layout
+    layout: Optional[LayoutProfile] = Field(
+        default=None,
+        description=(
+            'The declared indentation/delimiter layout policy a '
+            'LayoutFilter applies to this grammar\'s lexeme stream. '
+            'Grammar-own, like start and ignore: not composed across '
+            'parent_ids.'
         ),
     )

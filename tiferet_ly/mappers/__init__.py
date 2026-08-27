@@ -12,6 +12,7 @@ from .token import (
     TokenRuleAggregate,
     SimpleTokenRuleAggregate,
     ComplexTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
     TokenRuleConfigObject,
 )
 from .production import (
@@ -40,6 +41,7 @@ __all__ = [
     'TokenRuleAggregate',
     'SimpleTokenRuleAggregate',
     'ComplexTokenRuleAggregate',
+    'SyntheticTokenRuleAggregate',
     'TokenRuleConfigObject',
     'ProductionRuleAggregate',
     'SimpleProductionRuleAggregate',
