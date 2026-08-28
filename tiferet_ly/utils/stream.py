@@ -11,7 +11,7 @@ from ..mappers.lexeme import LexemeAggregate
 # *** classes
 
 # ** class: lexeme_token
-class _LexemeToken:
+class LexemeToken:
     '''
     Small duck-typed token carrier exposing exactly the four fields
     yacc's own internals and p_error read off whatever lexer.token()
@@ -66,12 +66,12 @@ class LexemeStream:
         self._iter = iter(lexemes)
 
     # * method: token
-    def token(self) -> Optional[_LexemeToken]:
+    def token(self) -> Optional[LexemeToken]:
         '''
         Return the next lexeme as a duck-typed token, or None at exhaustion.
 
         :return: The next token, or None once the stream is exhausted.
-        :rtype: Optional[_LexemeToken]
+        :rtype: Optional[LexemeToken]
         '''
 
         # Advance the stream once; None signals exhaustion to yacc.
@@ -80,4 +80,4 @@ class LexemeStream:
             return None
 
         # Carry the four span fields yacc and p_error read.
-        return _LexemeToken(lexeme.type, lexeme.value, lexeme.lineno, lexeme.lexpos)
+        return LexemeToken(lexeme.type, lexeme.value, lexeme.lineno, lexeme.lexpos)
