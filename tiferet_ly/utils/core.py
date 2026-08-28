@@ -34,6 +34,9 @@ READER_BUILD_FAILED_ID = 'READER_BUILD_FAILED'
 # ** constant: action_execution_failed_id
 ACTION_EXECUTION_FAILED_ID = 'ACTION_EXECUTION_FAILED'
 
+# ** constant: parse_input_invalid_id
+PARSE_INPUT_INVALID_ID = 'PARSE_INPUT_INVALID'
+
 # *** utils
 
 # ** util: ply_reader
@@ -163,6 +166,56 @@ class PlyReader:
             rule_name=rule_name,
         )
 
+    # * method: select_token_names
+    def select_token_names(
+            self,
+            grammar: GrammarAggregate,
+            grammars: List[GrammarAggregate],
+            tokens: List[TokenRuleAggregate]) -> List[str]:
+        '''
+        Derive a grammar's selected token names with no lexer built.
+
+        The completeness-satisfying half of build_lexer_module with the
+        lexer-building half removed: no regex compilation, no t_*
+        installation, no lex.lex() call. Includes a synthetic token's
+        name exactly as derive_tokens already does for the text path.
+
+        :param grammar: The resolved target grammar.
+        :type grammar: GrammarAggregate
+        :param grammars: The unfiltered grammar catalogue.
+        :type grammars: List[GrammarAggregate]
+        :param tokens: The unfiltered token catalogue.
+        :type tokens: List[TokenRuleAggregate]
+        :return: Bare, unprefixed token names in selected order.
+        :rtype: List[str]
+        '''
+
+        # Select then derive names only; no installation, no lexer.
+        selected = GrammarRuleSelector.select_tokens(grammar, grammars, tokens)
+        return RuleTranslator.derive_tokens(selected)
+
+    # * method: new_module (static)
+    @staticmethod
+    def new_module(name: str) -> Any:
+        '''
+        Construct a throwaway module registered in sys.modules.
+
+        Shared plumbing for any assembled reader that needs a module
+        object PLY (or a caller's own attribute installation) can bind
+        callables onto and inspect.getmodule can resolve.
+
+        :param name: The module name to register.
+        :type name: str
+        :return: The constructed, registered module.
+        :rtype: Any
+        '''
+
+        # Register the throwaway module so inspect.getmodule can find it.
+        module = types.ModuleType(name)
+        module.__file__ = __file__
+        sys.modules[module.__name__] = module
+        return module
+
     # * method: install_token_attrs
     def install_token_attrs(
             self,
@@ -237,9 +290,7 @@ class PlyReader:
 
         # Select then translate in returned order.
         selected = GrammarRuleSelector.select_tokens(grammar, grammars, tokens)
-        module = types.ModuleType('tiferet_ly_lexer')
-        module.__file__ = __file__
-        sys.modules[module.__name__] = module
+        module = self.new_module('tiferet_ly_lexer')
         self.install_token_attrs(module, selected, rewrites)
         module.t_error = self.bind_callable(module, 't_error', t_error)
 

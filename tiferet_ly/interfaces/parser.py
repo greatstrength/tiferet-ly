@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 # ** app
 from tiferet import Service
 from ..mappers.grammar import GrammarAggregate
+from ..mappers.lexeme import LexemeAggregate
 from ..mappers.production import ProductionRuleAggregate
 from ..mappers.token import TokenRuleAggregate
 
@@ -28,10 +29,15 @@ class ParserService(Service):
             grammars: List[GrammarAggregate],
             tokens: List[TokenRuleAggregate],
             productions: List[ProductionRuleAggregate],
-            text: str,
+            text: Optional[str] = None,
+            lexemes: Optional[List[LexemeAggregate]] = None,
             rewrites: Optional[Dict[str, type]] = None) -> Any:
         '''
-        Parse text against the selected rules for a grammar.
+        Parse against the selected rules for a grammar, from source text
+        or from an already-recognized lexeme stream.
+
+        Exactly one of text or lexemes must be supplied. When lexemes is
+        given, no PLY lexer is built or run at all.
 
         :param grammar_id: The target grammar identifier.
         :type grammar_id: str
@@ -41,8 +47,10 @@ class ParserService(Service):
         :type tokens: List[TokenRuleAggregate]
         :param productions: The unfiltered production catalogue.
         :type productions: List[ProductionRuleAggregate]
-        :param text: The source text to parse.
-        :type text: str
+        :param text: The source text to parse. Mutually exclusive with lexemes.
+        :type text: Optional[str]
+        :param lexemes: An already-recognized lexeme stream to parse. Mutually exclusive with text.
+        :type lexemes: Optional[List[LexemeAggregate]]
         :param rewrites: Optional action shorthand bindings.
         :type rewrites: Optional[Dict[str, type]]
         :return: Whatever the start-symbol action left in p[0].
