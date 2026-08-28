@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 # ** app
 from tiferet_ly.domain.grammar import Grammar
+from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.domain.production import ComplexProductionRule, ProductionRule, SimpleProductionRule
 from tiferet_ly.domain.token import ComplexTokenRule, SimpleTokenRule, TokenRule
 
@@ -212,15 +213,16 @@ def test_no_subgrammar_or_grammar_declaration_type() -> None:
     assert not hasattr(domain, 'Subgrammar')
     assert not hasattr(domain, 'GrammarDeclaration')
 
-# ** test: grammar_has_exactly_three_fields
-def test_grammar_has_exactly_three_fields() -> None:
+# ** test: grammar_has_exactly_five_fields
+def test_grammar_has_exactly_five_fields() -> None:
     '''
-    Test that Grammar carries exactly id, parent_ids, and start — no
-    token_rules, production_rules, or subgrammars field of any kind.
+    Test that Grammar carries exactly id, parent_ids, start, ignore, and
+    layout — no token_rules, production_rules, or subgrammars field of
+    any kind.
     '''
 
     # Assert the field set matches exactly.
-    assert set(Grammar.model_fields) == {'id', 'parent_ids', 'start'}
+    assert set(Grammar.model_fields) == {'id', 'parent_ids', 'start', 'ignore', 'layout'}
 
 # ** test: grammar_forbids_extra_fields
 def test_grammar_forbids_extra_fields() -> None:
@@ -293,6 +295,56 @@ def test_grammar_does_not_detect_self_referential_cycles() -> None:
 
     # Assert construction succeeded, proving no cycle check ran.
     assert grammar.parent_ids == ['core']
+
+# ** test: grammar_ignore_defaults_to_none
+def test_grammar_ignore_defaults_to_none() -> None:
+    '''
+    Test that a Grammar with no declared ignore defaults to None.
+    '''
+
+    # Construct a grammar with no ignore declared.
+    core = Grammar(id='core', start='module')
+
+    # Assert ignore defaults to None.
+    assert core.ignore is None
+
+# ** test: grammar_ignore_construct
+def test_grammar_ignore_construct() -> None:
+    '''
+    Test constructing a Grammar with a declared ignore pattern.
+    '''
+
+    # Construct a grammar that skips spaces and tabs before token matching.
+    core = Grammar(id='core', start='module', ignore=' \t')
+
+    # Assert the declared ignore pattern is set exactly.
+    assert core.ignore == ' \t'
+
+# ** test: grammar_layout_defaults_to_none
+def test_grammar_layout_defaults_to_none() -> None:
+    '''
+    Test that a Grammar with no declared layout profile defaults to None.
+    '''
+
+    # Construct a grammar with no layout declared.
+    core = Grammar(id='core', start='module')
+
+    # Assert layout defaults to None.
+    assert core.layout is None
+
+# ** test: grammar_layout_construct
+def test_grammar_layout_construct() -> None:
+    '''
+    Test constructing a Grammar with a declared LayoutProfile.
+    '''
+
+    # Construct a grammar declaring an indent/dedent layout profile.
+    profile = LayoutProfile(indent_token='INDENT', dedent_token='DEDENT')
+    core = Grammar(id='core', start='module', layout=profile)
+
+    # Assert the declared layout profile is set exactly.
+    assert core.layout is profile
+    assert core.layout.indent_token == 'INDENT'
 
 # ** test: grammar_does_not_validate_start_against_any_production
 def test_grammar_does_not_validate_start_against_any_production() -> None:

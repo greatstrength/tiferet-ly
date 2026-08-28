@@ -11,6 +11,7 @@ from tiferet_ly.domain.token import (
     TokenRule,
     SimpleTokenRule,
     ComplexTokenRule,
+    SyntheticTokenRule,
 )
 
 # *** tests
@@ -52,6 +53,34 @@ def test_complex_token_rule_construct() -> None:
     assert rule.grammar_id == 'arithmetic'
     assert rule.pattern == r'\d+'
     assert rule.action == 't.value = int(t.value)\nreturn t'
+
+# ** test: synthetic_token_rule_construct
+def test_synthetic_token_rule_construct() -> None:
+    '''
+    Test constructing a SyntheticTokenRule with only a name and grammar_id,
+    no pattern or action.
+    '''
+
+    # Construct the synthetic token rule.
+    rule = SyntheticTokenRule(name='INDENT', grammar_id='arithmetic')
+
+    # Assert the fields are set correctly and no pattern/action exist.
+    assert isinstance(rule, TokenRule)
+    assert rule.name == 'INDENT'
+    assert rule.grammar_id == 'arithmetic'
+    assert 'pattern' not in SyntheticTokenRule.model_fields
+    assert 'action' not in SyntheticTokenRule.model_fields
+
+# ** test: synthetic_token_rule_forbids_pattern
+def test_synthetic_token_rule_forbids_pattern() -> None:
+    '''
+    Test that passing a pattern to SyntheticTokenRule raises ValidationError,
+    per DomainObject's extra='forbid' config.
+    '''
+
+    # An unrecognized pattern field is rejected.
+    with pytest.raises(ValidationError):
+        SyntheticTokenRule(name='INDENT', grammar_id='arithmetic', pattern=r'\s+')
 
 # ** test: token_rule_base_has_no_pattern
 def test_token_rule_base_has_no_pattern() -> None:

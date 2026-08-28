@@ -5,6 +5,7 @@
 # ** app
 from .core import PlyReader
 from .grammar import GrammarRuleSelector
+from .layout import LayoutFilter
 from .lex import PlyLexer
 from .parse import PlyParser
 from .render import ResultRenderer
@@ -14,6 +15,7 @@ from .translation import RuleTranslator
 
 __all__ = [
     'GrammarRuleSelector',
+    'LayoutFilter',
     'PlyLexer',
     'PlyParser',
     'PlyReader',

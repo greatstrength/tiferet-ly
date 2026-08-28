@@ -22,6 +22,7 @@ from tiferet_ly.mappers.production import (
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 from tiferet_ly.utils.core import (
     ACTION_EXECUTION_FAILED_ID,
@@ -29,6 +30,7 @@ from tiferet_ly.utils.core import (
     LEX_ERROR_ID,
     PARSE_ERROR_ID,
     READER_BUILD_FAILED_ID,
+    PlyReader,
 )
 from tiferet_ly.utils.lex import PlyLexer
 from tiferet_ly.utils.parse import PlyParser
@@ -184,6 +186,169 @@ def test_tokenize_returns_lexeme_aggregates() -> None:
     assert result[0].value == 42
     assert result[0].lineno == 1
     assert result[0].lexpos == 0
+
+
+# ** test: build_lexer_module_skips_synthetic_installation
+def test_build_lexer_module_skips_synthetic_installation() -> None:
+    '''
+    Test that a synthetic rule contributes its name to module.tokens, in
+    declared position, but no t_* attribute is installed for it.
+    '''
+
+    # Build a lexer module from a catalogue with a trailing synthetic rule.
+    target = grammar()
+    tokens = [
+        number_token(),
+        SyntheticTokenRuleAggregate(name='INDENT', grammar_id='arith'),
+    ]
+    reader = PlyReader()
+    _lexer, module = reader.build_lexer_module(
+        target,
+        [target],
+        tokens,
+        None,
+        reader.make_t_error('arith'),
+    )
+
+    # Assert the name is present in declared position with no installed attribute.
+    assert module.tokens == ['NUMBER', 'INDENT']
+    assert not hasattr(module, 't_INDENT')
+
+
+# ** test: tokenize_applies_declared_layout_profile
+def test_tokenize_applies_declared_layout_profile() -> None:
+    '''
+    Test that tokenize runs LayoutFilter over the produced stream when
+    the target grammar declares a layout profile, injecting INDENT and
+    DEDENT around a nested block.
+
+    Uses a bare @ marker (rather than an "if" keyword) as the
+    block-introducing token, so it cannot overlap with the identifier
+    pattern — keyword/identifier disambiguation is a lexer-design
+    concern this wiring test does not need to exercise.
+    '''
+
+    # A minimal token set: a @ block marker, bare identifiers, colon, newline.
+    from tiferet_ly.domain.layout import LayoutProfile
+
+    target = grammar()
+    target.ignore = ' '
+    target.layout = LayoutProfile(
+        block_tokens=['BLOCK'],
+        newline_token='NEWLINE',
+        indent_token='INDENT',
+        dedent_token='DEDENT',
+        tab_size=4,
+    )
+    tokens = [
+        SimpleTokenRuleAggregate(name='BLOCK', grammar_id='arith', pattern=r'@'),
+        ComplexTokenRuleAggregate(name='IDENTIFIER', grammar_id='arith', pattern=r'[a-zA-Z_]+', action='return t'),
+        SimpleTokenRuleAggregate(name='COLON', grammar_id='arith', pattern=r':'),
+        ComplexTokenRuleAggregate(
+            name='NEWLINE',
+            grammar_id='arith',
+            pattern=r'\n',
+            action='t.lexer.lineno += 1\nreturn t',
+        ),
+    ]
+
+    # Tokenize a nested block, matching the LayoutFilter unit test's own example.
+    result = PlyLexer().tokenize('arith', [target], tokens, '@ x:\n    y')
+
+    # Assert the produced stream includes the injected INDENT.
+    assert [lexeme.type for lexeme in result] == [
+        'BLOCK', 'IDENTIFIER', 'COLON', 'NEWLINE', 'INDENT', 'IDENTIFIER', 'DEDENT',
+    ]
+
+
+# ** test: tokenize_without_layout_is_unaffected
+def test_tokenize_without_layout_is_unaffected() -> None:
+    '''
+    Test that a grammar with no declared layout produces the same output
+    as before this RFP — no LayoutFilter call, no behavior change.
+    '''
+
+    # Tokenize the same nested block text with no layout profile declared.
+    target = grammar()
+    target.ignore = ' '
+    tokens = [
+        SimpleTokenRuleAggregate(name='BLOCK', grammar_id='arith', pattern=r'@'),
+        ComplexTokenRuleAggregate(name='IDENTIFIER', grammar_id='arith', pattern=r'[a-zA-Z_]+', action='return t'),
+        SimpleTokenRuleAggregate(name='COLON', grammar_id='arith', pattern=r':'),
+        ComplexTokenRuleAggregate(
+            name='NEWLINE',
+            grammar_id='arith',
+            pattern=r'\n',
+            action='t.lexer.lineno += 1\nreturn t',
+        ),
+    ]
+    result = PlyLexer().tokenize('arith', [target], tokens, '@ x:\n    y')
+
+    # Assert no INDENT/DEDENT was injected; the raw token sequence passes through.
+    assert [lexeme.type for lexeme in result] == ['BLOCK', 'IDENTIFIER', 'COLON', 'NEWLINE', 'IDENTIFIER']
+
+
+# ** test: tokenize_with_synthetic_rule_present_still_lexes
+def test_tokenize_with_synthetic_rule_present_still_lexes() -> None:
+    '''
+    Test that tokenize succeeds when a synthetic rule is part of the
+    selected catalogue, even though it never matches source text.
+    '''
+
+    # Tokenize a number with an unrelated synthetic rule also selected.
+    result = PlyLexer().tokenize(
+        'arith',
+        [grammar()],
+        [number_token(), SyntheticTokenRuleAggregate(name='INDENT', grammar_id='arith')],
+        '42',
+    )
+
+    # Assert only the real NUMBER lexeme was produced.
+    assert [lexeme.type for lexeme in result] == ['NUMBER']
+
+
+# ** test: build_lexer_module_sets_t_ignore_when_declared
+def test_build_lexer_module_sets_t_ignore_when_declared() -> None:
+    '''
+    Test that a grammar with a declared ignore pattern sets module.t_ignore
+    to that exact string.
+    '''
+
+    # Build a lexer module for a grammar that declares an ignore pattern.
+    target = grammar()
+    target.ignore = ' \t'
+    reader = PlyReader()
+    _lexer, module = reader.build_lexer_module(
+        target,
+        [target],
+        [number_token()],
+        None,
+        reader.make_t_error('arith'),
+    )
+
+    # Assert t_ignore is set to the exact declared pattern.
+    assert module.t_ignore == ' \t'
+
+
+# ** test: build_lexer_module_omits_t_ignore_when_unset
+def test_build_lexer_module_omits_t_ignore_when_unset() -> None:
+    '''
+    Test that a grammar with no declared ignore leaves module.t_ignore unset.
+    '''
+
+    # Build a lexer module for a grammar with no ignore declared.
+    target = grammar()
+    reader = PlyReader()
+    _lexer, module = reader.build_lexer_module(
+        target,
+        [target],
+        [number_token()],
+        None,
+        reader.make_t_error('arith'),
+    )
+
+    # Assert no t_ignore attribute was installed.
+    assert not hasattr(module, 't_ignore')
 
 
 # ** test: tokenize_honors_whitespace_override

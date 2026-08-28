@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 # ** app
-from tiferet_ly.domain.token import SimpleTokenRule
+from tiferet_ly.domain.token import ComplexTokenRule, SimpleTokenRule
 from tiferet_ly.mappers.core import (
     expand_keyed_entries,
     wrap_keyed_entries,
@@ -18,6 +18,7 @@ from tiferet_ly.mappers.core import (
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
     TokenRuleAggregate,
     TokenRuleConfigObject,
 )
@@ -44,6 +45,12 @@ COMPLEX_CORE = ComplexTokenRuleAggregate(
     grammar_id='core',
     pattern=r'\d+',
     action='t.value = int(t.value)\nreturn t',
+)
+
+# ** constant: synthetic_core
+SYNTHETIC_CORE = SyntheticTokenRuleAggregate(
+    name='INDENT',
+    grammar_id='core',
 )
 
 # *** functions
@@ -115,6 +122,25 @@ def test_token_round_trip_simple_and_complex_cross_grammar() -> None:
     assert SIMPLE_CORE.grammar_id != SIMPLE_DOMAIN_EXTRA.grammar_id
 
 
+# ** test: synthetic_token_round_trips_with_no_pattern_or_action
+def test_synthetic_token_round_trips_with_no_pattern_or_action() -> None:
+    '''
+    Test that a SyntheticTokenRuleAggregate round-trips through
+    TokenRuleConfigObject.map()/.from_model() without requiring a
+    pattern or action.
+    '''
+
+    # Round-trip the synthetic rule and assert field equality.
+    round_tripped = round_trip(SYNTHETIC_CORE)
+    assert isinstance(round_tripped, SyntheticTokenRuleAggregate)
+    assert_rule_fields_equal(round_tripped, SYNTHETIC_CORE)
+
+    # The serialized data carries neither pattern nor action.
+    flat = TokenRuleConfigObject.from_model(SYNTHETIC_CORE).to_primitive('to_data', exclude=set())
+    assert 'pattern' not in flat
+    assert 'action' not in flat
+
+
 # ** test: token_serialized_sequence_of_single_key_mappings
 def test_token_serialized_sequence_of_single_key_mappings() -> None:
     '''
@@ -160,24 +186,50 @@ def test_token_serialized_sequence_of_single_key_mappings() -> None:
     assert expand_keyed_entries(wrapped, key_field='name') == flats
 
 
-# ** test: token_map_raises_same_domain_error_on_corrupted_invariant
-def test_token_map_raises_same_domain_error_on_corrupted_invariant() -> None:
+# ** test: token_map_with_no_pattern_or_action_is_synthetic_not_corrupted
+def test_token_map_with_no_pattern_or_action_is_synthetic_not_corrupted() -> None:
     '''
-    Test that a corrupted config object raises the same domain-level
-    ValidationError at .map() time that RFP-001 construction would raise.
+    Test that a config object with neither pattern nor action set is no
+    longer a corrupted SimpleTokenRule invariant (RFP-001 era): per
+    RFP-010, that shape is the legitimate discriminator for a
+    SyntheticTokenRuleAggregate.
     '''
 
-    # Build a config object that bypasses required-field validation.
-    corrupted = TokenRuleConfigObject.model_construct(
-        name='PLUS',
+    # Build a config object carrying neither pattern nor action.
+    synthetic = TokenRuleConfigObject.model_construct(
+        name='INDENT',
         grammar_id='core',
         pattern=None,
         action=None,
     )
 
+    # .map() constructs a synthetic aggregate rather than raising.
+    mapped = synthetic.map()
+    assert isinstance(mapped, SyntheticTokenRuleAggregate)
+    assert mapped.name == 'INDENT'
+    assert mapped.grammar_id == 'core'
+
+
+# ** test: token_map_raises_same_domain_error_on_corrupted_invariant
+def test_token_map_raises_same_domain_error_on_corrupted_invariant() -> None:
+    '''
+    Test that a config object with an action but no pattern raises the
+    same domain-level ValidationError at .map() time that ComplexTokenRule
+    construction would raise — action present with pattern absent stays an
+    invalid combination.
+    '''
+
+    # Build a config object that bypasses required-field validation.
+    corrupted = TokenRuleConfigObject.model_construct(
+        name='NUMBER',
+        grammar_id='core',
+        pattern=None,
+        action='return t',
+    )
+
     # Domain construction of the same invariant raises ValidationError.
     with pytest.raises(ValidationError) as domain_error:
-        SimpleTokenRule(name='PLUS', grammar_id='core', pattern=None)
+        ComplexTokenRule(name='NUMBER', grammar_id='core', pattern=None, action='return t')
 
     # .map() must raise the same class of domain-level error.
     with pytest.raises(ValidationError) as map_error:

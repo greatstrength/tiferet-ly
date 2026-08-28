@@ -107,8 +107,12 @@ declares itself overrides a same-named rule an ancestor declared.
 already-recognized token names introduce a block, which pair up as open
 and close delimiters, which names a line break, and which two synthetic
 token names a post-lex filter should inject as a block opens or closes.
-It is data, not a subclass: one filter mechanism runs for every declared
-language, shaped only by what a grammar's own profile names.
+A profile also declares the column width one indentation level
+represents, and whether the line-break token is dropped while delimiter
+depth is open — both default to a sensible value so a minimal profile
+need only name its two synthetic tokens. It is data, not a subclass: one
+filter mechanism runs for every declared language, shaped only by what a
+grammar's own profile names.
 
 **Declared language** — the three catalogues taken together: grammars,
 token rules, and productions. This is what a consumer writes. It is the
@@ -280,10 +284,15 @@ When the target grammar declared a layout profile, a lexeme-only read
 gains one more step before it hands anything back: a stateless filter
 walks the engine's own lexeme stream and, using only the names the
 profile declares, injects the two synthetic lexemes an
-indentation-sensitive language needs and drops a suppressed newline while
-delimiter depth is open. The filter never re-matches text and never
-consults the engine again; it only reshapes a stream the engine already
-produced. A grammar with no layout profile is read exactly as before.
+indentation-sensitive language needs and, unless the profile turns this
+off, drops a line-break lexeme while delimiter depth is open. Indent and
+dedent are column-width decisions, not single-step ones: a column change
+is measured against the profile's declared tab size, so exiting several
+indentation levels at once — including whatever is still open when the
+stream ends — injects one dedent per level, not one dedent per line. The
+filter never re-matches text and never consults the engine again; it
+only reshapes a stream the engine already produced. A grammar with no
+layout profile is read exactly as before.
 
 **Verdict:** agnostic to all four axes. Reading text looks identical no
 matter which language was declared, how any rule was shaped, or which

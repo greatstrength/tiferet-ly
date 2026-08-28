@@ -7,6 +7,7 @@ from .token import (
     TokenRule,
     SimpleTokenRule,
     ComplexTokenRule,
+    SyntheticTokenRule,
 )
 from .production import (
     ProductionRule,
@@ -15,6 +16,9 @@ from .production import (
 )
 from .grammar import (
     Grammar,
+)
+from .layout import (
+    LayoutProfile,
 )
 from .ast import (
     AstNode,
@@ -29,10 +33,12 @@ __all__ = [
     'TokenRule',
     'SimpleTokenRule',
     'ComplexTokenRule',
+    'SyntheticTokenRule',
     'ProductionRule',
     'SimpleProductionRule',
     'ComplexProductionRule',
     'Grammar',
+    'LayoutProfile',
     'AstNode',
     'Lexeme',
 ]
