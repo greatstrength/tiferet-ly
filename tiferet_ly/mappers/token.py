@@ -44,7 +44,6 @@ class TokenRuleAggregate(TokenRule, NamedRuleAggregate):
         # Update the pattern; validate_assignment=True handles re-validation.
         self.pattern = pattern
 
-
 # ** mapper: simple_token_rule_aggregate
 class SimpleTokenRuleAggregate(SimpleTokenRule, TokenRuleAggregate):
     '''
@@ -52,7 +51,6 @@ class SimpleTokenRuleAggregate(SimpleTokenRule, TokenRuleAggregate):
     '''
 
     pass
-
 
 # ** mapper: complex_token_rule_aggregate
 class ComplexTokenRuleAggregate(ComplexTokenRule, TokenRuleAggregate):
@@ -74,7 +72,6 @@ class ComplexTokenRuleAggregate(ComplexTokenRule, TokenRuleAggregate):
         # Update the action; validate_assignment=True handles re-validation.
         self.action = action
 
-
 # ** mapper: synthetic_token_rule_aggregate
 class SyntheticTokenRuleAggregate(SyntheticTokenRule, TokenRuleAggregate):
     '''
@@ -85,7 +82,6 @@ class SyntheticTokenRuleAggregate(SyntheticTokenRule, TokenRuleAggregate):
     '''
 
     pass
-
 
 # ** mapper: token_rule_config_object
 class TokenRuleConfigObject(TransferObject):

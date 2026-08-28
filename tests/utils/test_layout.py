@@ -12,9 +12,9 @@ from tiferet_ly.utils.layout import LayoutFilter
 # ** function: python_like_profile
 def python_like_profile(**overrides) -> LayoutProfile:
     '''
-    Construct a LayoutProfile reproducing tiferet-takwin's current
-    BlockTracker configuration (IF/FOR/... as block tokens, parens as
-    delimiters, NEWLINE suppressed inside them).
+    Construct a LayoutProfile modeling a Python-like layout policy
+    (IF/FOR/... as block tokens, parens as delimiters, NEWLINE suppressed
+    inside them).
 
     :param overrides: Field overrides applied on top of the defaults.
     :type overrides: dict
@@ -71,8 +71,7 @@ def test_apply_empty_stream_returns_empty() -> None:
 def test_apply_injects_nested_indent_and_dedent() -> None:
     '''
     Test a worked, nested-block example: two IF blocks nesting and then
-    fully unwinding, reproducing BlockTracker's injected-INDENT/DEDENT
-    positions.
+    fully unwinding, asserting the injected INDENT/DEDENT positions.
 
     Source:
         if x:

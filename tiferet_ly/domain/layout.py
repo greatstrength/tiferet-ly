@@ -20,8 +20,7 @@ class LayoutProfile(DomainObject):
     tokens introduce a block or pair up as nesting delimiters, what to
     name the synthetic indent/dedent tokens a LayoutFilter injects, and
     whether a newline token is suppressed while delimiter depth is
-    nonzero. Productizes tiferet-takwin's hand-written BlockTracker state
-    machine as declared data instead of a Python subclass.
+    nonzero.
     '''
 
     # * attribute: block_tokens

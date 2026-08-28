@@ -49,11 +49,10 @@ def test_layout_profile_construct_minimal() -> None:
 # ** test: layout_profile_construct_full
 def test_layout_profile_construct_full() -> None:
     '''
-    Test constructing a LayoutProfile with every field declared explicitly,
-    reproducing the compiler's current BlockTracker configuration.
+    Test constructing a LayoutProfile with every field declared explicitly.
     '''
 
-    # Construct a profile mirroring TiferetLexer's current constants.
+    # Construct a profile with every field set.
     profile = LayoutProfile(
         block_tokens=['IF', 'FOR', 'DEF'],
         open_delimiters=['LPAREN'],
