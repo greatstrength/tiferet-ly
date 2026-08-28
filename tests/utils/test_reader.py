@@ -565,7 +565,6 @@ def test_parse_syntax_error_raises() -> None:
     assert raised.value.error_code == PARSE_ERROR_ID
     assert raised.value.kwargs['grammar_id'] == 'arith'
 
-
 # ** test: parse_neither_text_nor_lexemes_raises
 def test_parse_neither_text_nor_lexemes_raises(monkeypatch) -> None:
     '''
@@ -595,7 +594,6 @@ def test_parse_neither_text_nor_lexemes_raises(monkeypatch) -> None:
     assert raised.value.error_code == PARSE_INPUT_INVALID_ID
     assert raised.value.kwargs['reason'] == 'missing'
     assert called['yacc'] is False
-
 
 # ** test: parse_both_text_and_lexemes_raises
 def test_parse_both_text_and_lexemes_raises(monkeypatch) -> None:
@@ -629,7 +627,6 @@ def test_parse_both_text_and_lexemes_raises(monkeypatch) -> None:
     assert raised.value.kwargs['reason'] == 'ambiguous'
     assert called['yacc'] is False
 
-
 # ** test: parse_with_lexemes_matches_text_result
 def test_parse_with_lexemes_matches_text_result() -> None:
     '''
@@ -655,7 +652,6 @@ def test_parse_with_lexemes_matches_text_result() -> None:
 
     # Assert the same sum a text= parse of '1+2' would produce.
     assert result == 3
-
 
 # ** test: parse_with_lexemes_never_builds_lexer
 def test_parse_with_lexemes_never_builds_lexer(monkeypatch) -> None:
@@ -704,7 +700,6 @@ def test_parse_with_lexemes_never_builds_lexer(monkeypatch) -> None:
     assert called['translate_token_rule'] is False
     assert called['install'] is False
 
-
 # ** test: parse_with_lexemes_accepts_synthetic_token
 def test_parse_with_lexemes_accepts_synthetic_token() -> None:
     '''
@@ -742,7 +737,6 @@ def test_parse_with_lexemes_accepts_synthetic_token() -> None:
     )
     assert result == 42
 
-
 # ** test: parse_golden_cross_check
 def test_parse_golden_cross_check() -> None:
     '''
@@ -768,7 +762,6 @@ def test_parse_golden_cross_check() -> None:
 
     # Assert both paths agree, standing in for takwin's scan.module -> parse.module prefix.
     assert text_result == lexemes_result == 3
-
 
 # ** test: parse_build_failure_raises
 def test_parse_build_failure_raises() -> None:
