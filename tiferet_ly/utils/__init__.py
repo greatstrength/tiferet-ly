@@ -9,6 +9,7 @@ from .layout import LayoutFilter
 from .lex import PlyLexer
 from .parse import PlyParser
 from .render import ResultRenderer
+from .stream import LexemeStream
 from .translation import RuleTranslator
 
 # *** exports
@@ -16,6 +17,7 @@ from .translation import RuleTranslator
 __all__ = [
     'GrammarRuleSelector',
     'LayoutFilter',
+    'LexemeStream',
     'PlyLexer',
     'PlyParser',
     'PlyReader',

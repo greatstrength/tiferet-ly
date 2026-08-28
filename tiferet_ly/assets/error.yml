@@ -24,3 +24,8 @@ errors:
     message:
       - lang: en_US
         text: "Action execution failed for grammar {grammar_id}."
+  PARSE_INPUT_INVALID:
+    name: Parse Input Invalid
+    message:
+      - lang: en_US
+        text: "Exactly one of text or lexemes must be supplied for grammar {grammar_id} ({reason})."

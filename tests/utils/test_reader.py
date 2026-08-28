@@ -29,11 +29,13 @@ from tiferet_ly.utils.core import (
     GRAMMAR_NOT_FOUND_ID,
     LEX_ERROR_ID,
     PARSE_ERROR_ID,
+    PARSE_INPUT_INVALID_ID,
     READER_BUILD_FAILED_ID,
     PlyReader,
 )
 from tiferet_ly.utils.lex import PlyLexer
 from tiferet_ly.utils.parse import PlyParser
+from tiferet_ly.utils.translation import RuleTranslator
 
 # *** functions
 
@@ -562,6 +564,210 @@ def test_parse_syntax_error_raises() -> None:
     # Assert the structured parse error names the grammar.
     assert raised.value.error_code == PARSE_ERROR_ID
     assert raised.value.kwargs['grammar_id'] == 'arith'
+
+
+# ** test: parse_neither_text_nor_lexemes_raises
+def test_parse_neither_text_nor_lexemes_raises(monkeypatch) -> None:
+    '''
+    Test that omitting both text and lexemes raises PARSE_INPUT_INVALID
+    before yacc.yacc is ever called.
+    '''
+
+    # Patch yacc.yacc so a successful path would be visible.
+    called = {'yacc': False}
+
+    def fail_if_called(*_args, **_kwargs):
+        called['yacc'] = True
+        raise AssertionError('yacc.yacc should not be called')
+
+    monkeypatch.setattr('tiferet_ly.utils.parse.yacc.yacc', fail_if_called)
+
+    # Parse with neither text nor lexemes supplied.
+    with pytest.raises(ServiceError) as raised:
+        PlyParser().parse(
+            'arith',
+            [grammar()],
+            [number_token(), plus_token(), ignore_token()],
+            arith_productions(),
+        )
+
+    # Assert PARSE_INPUT_INVALID names the missing-input reason and ply was not invoked.
+    assert raised.value.error_code == PARSE_INPUT_INVALID_ID
+    assert raised.value.kwargs['reason'] == 'missing'
+    assert called['yacc'] is False
+
+
+# ** test: parse_both_text_and_lexemes_raises
+def test_parse_both_text_and_lexemes_raises(monkeypatch) -> None:
+    '''
+    Test that supplying both text and lexemes raises PARSE_INPUT_INVALID
+    before yacc.yacc is ever called.
+    '''
+
+    # Patch yacc.yacc so a successful path would be visible.
+    called = {'yacc': False}
+
+    def fail_if_called(*_args, **_kwargs):
+        called['yacc'] = True
+        raise AssertionError('yacc.yacc should not be called')
+
+    monkeypatch.setattr('tiferet_ly.utils.parse.yacc.yacc', fail_if_called)
+
+    # Parse with both text and lexemes supplied.
+    with pytest.raises(ServiceError) as raised:
+        PlyParser().parse(
+            'arith',
+            [grammar()],
+            [number_token(), plus_token(), ignore_token()],
+            arith_productions(),
+            text='1+2',
+            lexemes=[LexemeAggregate.synthesize('NUMBER', lineno=1, lexpos=0, value=1)],
+        )
+
+    # Assert PARSE_INPUT_INVALID names the ambiguous-input reason and ply was not invoked.
+    assert raised.value.error_code == PARSE_INPUT_INVALID_ID
+    assert raised.value.kwargs['reason'] == 'ambiguous'
+    assert called['yacc'] is False
+
+
+# ** test: parse_with_lexemes_matches_text_result
+def test_parse_with_lexemes_matches_text_result() -> None:
+    '''
+    Test that parsing a hand-built lexeme stream returns the same result
+    a text= parse of the equivalent source would.
+    '''
+
+    # Build the lexeme stream '1+2' would tokenize to, WS already dropped.
+    lexemes = [
+        LexemeAggregate.synthesize('NUMBER', lineno=1, lexpos=0, value=1),
+        LexemeAggregate.synthesize('PLUS', lineno=1, lexpos=1, value='+'),
+        LexemeAggregate.synthesize('NUMBER', lineno=1, lexpos=2, value=2),
+    ]
+
+    # Parse from the lexeme stream instead of text.
+    result = PlyParser().parse(
+        'arith',
+        [grammar()],
+        [number_token(), plus_token(), ignore_token()],
+        arith_productions(),
+        lexemes=lexemes,
+    )
+
+    # Assert the same sum a text= parse of '1+2' would produce.
+    assert result == 3
+
+
+# ** test: parse_with_lexemes_never_builds_lexer
+def test_parse_with_lexemes_never_builds_lexer(monkeypatch) -> None:
+    '''
+    Test that the lexemes= path never calls ply.lex.lex, re.compile on a
+    token pattern, or install_token_attrs.
+    '''
+
+    # Patch each call site so a successful path would be visible.
+    called = {'lex': False, 'translate_token_rule': False, 'install': False}
+
+    def fail_lex(*_args, **_kwargs):
+        called['lex'] = True
+        raise AssertionError('lex.lex should not be called')
+
+    def fail_install(*_args, **_kwargs):
+        called['install'] = True
+        raise AssertionError('install_token_attrs should not be called')
+
+    def fail_translate_token_rule(*_args, **_kwargs):
+        called['translate_token_rule'] = True
+        raise AssertionError('translate_token_rule should not be called')
+
+    monkeypatch.setattr('tiferet_ly.utils.core.lex.lex', fail_lex)
+    monkeypatch.setattr(PlyReader, 'install_token_attrs', fail_install)
+    monkeypatch.setattr(RuleTranslator, 'translate_token_rule', fail_translate_token_rule)
+
+    # Parse from a lexeme stream for the same arith grammar.
+    lexemes = [
+        LexemeAggregate.synthesize('NUMBER', lineno=1, lexpos=0, value=1),
+        LexemeAggregate.synthesize('PLUS', lineno=1, lexpos=1, value='+'),
+        LexemeAggregate.synthesize('NUMBER', lineno=1, lexpos=2, value=2),
+    ]
+    result = PlyParser().parse(
+        'arith',
+        [grammar()],
+        [number_token(), plus_token(), ignore_token()],
+        arith_productions(),
+        lexemes=lexemes,
+    )
+
+    # Assert the parse still succeeded and none of the lexer-building call sites fired.
+    # translate_token_rule is where a token pattern's re.compile validation lives.
+    assert result == 3
+    assert called['lex'] is False
+    assert called['translate_token_rule'] is False
+    assert called['install'] is False
+
+
+# ** test: parse_with_lexemes_accepts_synthetic_token
+def test_parse_with_lexemes_accepts_synthetic_token() -> None:
+    '''
+    Test that a lexeme whose type names a declared SyntheticTokenRule is
+    accepted when a production legitimately consumes it.
+    '''
+
+    # Declare a synthetic END marker alongside NUMBER, and a production consuming it.
+    tokens = [
+        number_token(),
+        SyntheticTokenRuleAggregate(name='END', grammar_id='arith'),
+    ]
+    productions = [
+        ComplexProductionRuleAggregate(
+            name='expr',
+            grammar_id='arith',
+            spec='expr : NUMBER END',
+            action='p[0] = p[1]',
+        ),
+    ]
+
+    # Build a lexeme stream that includes the synthetic token's type.
+    lexemes = [
+        LexemeAggregate.synthesize('NUMBER', lineno=1, lexpos=0, value=42),
+        LexemeAggregate.synthesize('END', lineno=1, lexpos=2),
+    ]
+
+    # Parse succeeds, proving completeness already covers synthetic names.
+    result = PlyParser().parse(
+        'arith',
+        [grammar()],
+        tokens,
+        productions,
+        lexemes=lexemes,
+    )
+    assert result == 42
+
+
+# ** test: parse_golden_cross_check
+def test_parse_golden_cross_check() -> None:
+    '''
+    Test that parsing text= directly and parsing the tokenize() output of
+    that same text as lexemes= produce identical results.
+    '''
+
+    # Parse the same source both ways.
+    text = '1+2'
+    grammars = [grammar()]
+    tokens = [number_token(), plus_token(), ignore_token()]
+    productions = arith_productions()
+
+    text_result = PlyParser().parse('arith', grammars, tokens, productions, text=text)
+    lexemes = PlyLexer().tokenize('arith', grammars, tokens, text)
+    lexemes_result = PlyParser().parse(
+        'arith',
+        grammars,
+        tokens,
+        productions,
+        lexemes=lexemes,
+    )
+
+    # Assert both paths agree, standing in for takwin's scan.module -> parse.module prefix.
+    assert text_result == lexemes_result == 3
 
 
 # ** test: parse_build_failure_raises
