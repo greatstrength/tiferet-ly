@@ -1,0 +1,35 @@
+[project]
+name = "tiferet-ly"
+dynamic = ["version"]
+description = "A Lex/Yacc wrapper built with Tiferet."
+authors = [
+    { name = "Andrew Shatz, Great Strength Systems", email = "andrew@greatstrength.me" }
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "tiferet",
+    "pydantic>=2.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/greatstrength/tiferet-ly"
+Repository = "https://github.com/greatstrength/tiferet-ly"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "PyYAML",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tiferet_ly*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "tiferet_ly.__version__" }

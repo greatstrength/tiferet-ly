@@ -1,0 +1,30 @@
+grammars:
+  expr:
+    parent_ids: []
+    start: expr
+  arith:
+    parent_ids:
+      - expr
+      - factor
+    start: expr
+
+tokens:
+  - NUMBER:
+      grammar_id: arith
+      pattern: '[0-9]+'
+  - PLUS:
+      grammar_id: arith
+      pattern: '\+'
+      action: 't.value = int(t.value)'
+
+production_rules:
+  - expr:
+      grammar_id: arith
+      spec: expr PLUS term
+      action: 'p[0] = p[1]'
+  - expr:
+      grammar_id: arith
+      spec: term
+  - term:
+      grammar_id: expr
+      spec: factor
