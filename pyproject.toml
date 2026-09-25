@@ -33,3 +33,6 @@ include = ["tiferet_ly*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "tiferet_ly.__version__" }
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
