@@ -13,16 +13,21 @@ from tiferet_ly.assets.translation import (
     ACTION_COMPILATION_FAILED_ID,
     RULE_PATTERN_INVALID_ID,
 )
+from tiferet_ly.mappers.token import (
+    ComplexTokenRuleAggregate,
+    SimpleTokenRuleAggregate,
+)
 
 # *** utils
 
 # ** util: rule_translator
 class RuleTranslator:
     '''
-    Compile declared action source into a callable a reader can invoke.
+    Translate declared token rules into names and values a reader can use.
 
-    The helper validates a pattern, then builds one new function. It does
-    not translate a whole rule, select a grammar, or import PLY.
+    Simple tokens keep their pattern text. Complex tokens become callables
+    through the shared action compiler. The utility does not select a
+    grammar, persist rules, translate productions, or import PLY.
     '''
 
     # * method: _compile_action (static)
@@ -93,3 +98,57 @@ class RuleTranslator:
 
         # Return a distinct function object for this call.
         return function
+
+    # * method: translate_token_rule (static)
+    @staticmethod
+    def translate_token_rule(
+            rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate,
+        ) -> tuple[str, str | Callable]:
+        '''
+        Translate one declared token rule into a reader name and value.
+
+        A simple token returns its attribute name and the pattern text
+        unchanged. A complex token returns a callable from the shared
+        action compiler. An invalid complex pattern is rejected by that
+        compiler before the action is compiled.
+
+        :param rule: A simple or complex token aggregate.
+        :type rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate
+        :return: The ``t_`` name and either the pattern or a callable.
+        :rtype: tuple[str, str | Callable]
+        '''
+
+        # Name the reader attribute from the bare declared token name.
+        token_name = f't_{rule.name}'
+
+        # Keep a simple pattern as text. Do not compile or rewrite it.
+        if isinstance(rule, SimpleTokenRuleAggregate):
+            return token_name, rule.pattern
+
+        # Compile a complex token. Invalid patterns fail before synthesis.
+        function = RuleTranslator._compile_action(
+            rule.name,
+            rule.pattern,
+            rule.action,
+        )
+
+        # Return the reader name and the compiled action.
+        return token_name, function
+
+    # * method: derive_tokens (static)
+    @staticmethod
+    def derive_tokens(rules) -> list[str]:
+        '''
+        Derive bare token names in declared order.
+
+        Every rule contributes its name. Membership and grammar identity
+        are not consulted, and the names are not sorted.
+
+        :param rules: Declared token rules in input order.
+        :type rules: list
+        :return: Bare token names in that same order.
+        :rtype: list[str]
+        '''
+
+        # Copy names in input order without filtering or sorting.
+        return [rule.name for rule in rules]
