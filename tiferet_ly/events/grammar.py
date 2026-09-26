@@ -6,6 +6,7 @@
 from tiferet import DomainEvent
 from tiferet_ly.interfaces.grammar import GrammarService
 from tiferet_ly.interfaces.production import ProductionService
+from tiferet_ly.interfaces.token import TokenService
 from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.mappers.production import ProductionRuleAggregate
 from tiferet_ly.utils.grammar import GrammarRuleSelector
@@ -348,3 +349,96 @@ class SetGrammarStart(GrammarEvent):
         # Persist and return the mutated aggregate.
         self.grammar_service.save(grammar)
         return grammar
+
+# ** event: remove_grammar
+class RemoveGrammar(GrammarEvent):
+    '''
+    Delete a grammar only when no parent, token, or production still names it.
+
+    An unreferenced id is removed and returned even when the grammar is
+    already absent. Removal does not resolve start.
+    '''
+
+    # * attribute: token_service
+    token_service: TokenService
+
+    # * attribute: production_service
+    production_service: ProductionService
+
+    # * init
+    def __init__(
+            self,
+            grammar_service: GrammarService,
+            token_service: TokenService,
+            production_service: ProductionService,
+        ) -> None:
+        '''
+        Initialize with grammar, token, and production services.
+
+        :param grammar_service: The grammar service.
+        :type grammar_service: GrammarService
+        :param token_service: The token service.
+        :type token_service: TokenService
+        :param production_service: The production service.
+        :type production_service: ProductionService
+        '''
+
+        # Keep the shared grammar service on the base.
+        GrammarEvent.__init__(self, grammar_service)
+
+        # Tokens and productions are scanned only for a remaining reference.
+        self.token_service = token_service
+        self.production_service = production_service
+
+    # * method: execute
+    @DomainEvent.parameters_required(['id'])
+    def execute(self, id: str, **kwargs) -> str:
+        '''
+        Delete a grammar when nothing still references it.
+
+        :param id: The grammar identifier.
+        :type id: str
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: dict
+        :return: The deleted grammar identifier.
+        :rtype: str
+        '''
+
+        # Another grammar still lists this id as a parent.
+        self.verify(
+            not any(
+                grammar.id != id and id in grammar.parent_ids
+                for grammar in self.grammar_service.list()
+            ),
+            a.grammar.GRAMMAR_STILL_REFERENCED_ID,
+            message=f'Grammar {id} is still referenced.',
+            id=id,
+        )
+
+        # A token still belongs to this grammar, even if the grammar is absent.
+        self.verify(
+            not any(
+                token.grammar_id == id
+                for token in self.token_service.list()
+            ),
+            a.grammar.GRAMMAR_STILL_REFERENCED_ID,
+            message=f'Grammar {id} is still referenced.',
+            id=id,
+        )
+
+        # A production still belongs to this grammar, even if it is absent.
+        self.verify(
+            not any(
+                production.grammar_id == id
+                for production in self.production_service.list()
+            ),
+            a.grammar.GRAMMAR_STILL_REFERENCED_ID,
+            message=f'Grammar {id} is still referenced.',
+            id=id,
+        )
+
+        # Absence is an idempotent delete, not a not-found failure.
+        self.grammar_service.delete(id)
+
+        # Return the identifier. Do not return None.
+        return id
