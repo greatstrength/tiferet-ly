@@ -13,6 +13,10 @@ from tiferet_ly.assets.translation import (
     ACTION_COMPILATION_FAILED_ID,
     RULE_PATTERN_INVALID_ID,
 )
+from tiferet_ly.mappers.production import (
+    ComplexProductionRuleAggregate,
+    SimpleProductionRuleAggregate,
+)
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
@@ -23,11 +27,14 @@ from tiferet_ly.mappers.token import (
 # ** util: rule_translator
 class RuleTranslator:
     '''
-    Translate declared token rules into names and values a reader can use.
+    Translate declared rules into names and values a reader can use.
 
-    Simple tokens keep their pattern text. Complex tokens become callables
-    through the shared action compiler. The utility does not select a
-    grammar, persist rules, translate productions, or import PLY.
+    Simple tokens keep their pattern text. Complex tokens and complex
+    productions become callables through the shared action compiler. A
+    simple production with one right-hand-side symbol becomes a
+    pass-through manufactured at translation time, carrying its
+    specification as the callable docstring. The utility does not select
+    a grammar, persist rules, or import PLY.
     '''
 
     # * method: _compile_action (static)
@@ -152,3 +159,84 @@ class RuleTranslator:
 
         # Copy names in input order without filtering or sorting.
         return [rule.name for rule in rules]
+
+    # * method: translate_production_rule (static)
+    @staticmethod
+    def translate_production_rule(
+            rule: SimpleProductionRuleAggregate | ComplexProductionRuleAggregate,
+        ) -> tuple[str, Callable]:
+        '''
+        Translate one declared production into a reader name and callable.
+
+        A complex production is compiled by the shared action compiler, so
+        its docstring is the specification and its call performs the
+        declared action. A simple production stores no action. When its
+        specification has exactly one right-hand-side symbol, a
+        pass-through that assigns ``p[0] = p[1]`` is manufactured here and
+        carries the specification as its docstring. Any other simple
+        specification is rejected and names the rule.
+
+        :param rule: A simple or complex production aggregate.
+        :type rule: SimpleProductionRuleAggregate | ComplexProductionRuleAggregate
+        :return: The ``p_`` name and a callable.
+        :rtype: tuple[str, Callable]
+        '''
+
+        # Name the reader attribute from the bare declared production name.
+        production_name = f'p_{rule.name}'
+
+        # Manufacture a one-symbol simple pass-through. Do not compile it.
+        if isinstance(rule, SimpleProductionRuleAggregate):
+            function = RuleTranslator._simple_pass_through(rule)
+            return production_name, function
+
+        # Compile a complex production through the shared action compiler.
+        function = RuleTranslator._compile_action(
+            rule.name,
+            rule.spec,
+            rule.action,
+        )
+
+        # Return the reader name and the compiled action.
+        return production_name, function
+
+    # * method: _simple_pass_through (static)
+    @staticmethod
+    def _simple_pass_through(rule: SimpleProductionRuleAggregate) -> Callable:
+        '''
+        Manufacture a one-symbol simple production pass-through.
+
+        The function is created at translation time and is not stored on
+        the domain model. A specification with no colon, or with zero or
+        more than one right-hand-side symbol, is rejected before the
+        function is created.
+
+        :param rule: A simple production aggregate.
+        :type rule: SimpleProductionRuleAggregate
+        :return: A new function that assigns ``p[0] = p[1]``.
+        :rtype: Callable
+        '''
+
+        # Count right-hand-side symbols after the specification colon.
+        _, separator, rhs = rule.spec.partition(':')
+        symbols = rhs.split() if separator else []
+
+        # Reject zero or many symbols and name the rule.
+        if len(symbols) != 1:
+            ServiceError.raise_for(
+                RuleTranslator,
+                RULE_PATTERN_INVALID_ID,
+                message='Simple production specification must have exactly one right-hand-side symbol.',
+                rule_name=rule.name,
+            )
+
+        # Manufacture a new pass-through. Carry the spec as the docstring.
+        def pass_through(p):
+            p[0] = p[1]
+
+        pass_through.__name__ = rule.name
+        pass_through.__qualname__ = rule.name
+        pass_through.__doc__ = rule.spec
+
+        # Return a distinct function object for this call.
+        return pass_through
