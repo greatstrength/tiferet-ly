@@ -62,9 +62,6 @@ _VALID = {
 # ** constant: absent_events
 _ABSENT_EVENTS = (
     'GetProduction',
-    'RemoveProduction',
-    'RenameProduction',
-    'ReassignProductionGrammar',
 )
 
 # *** functions
@@ -233,11 +230,10 @@ def test_module_surface():
         assert not hasattr(events_package, event_cls.__name__)
     assert not hasattr(events_package, 'ProductionEvent')
 
-    # Pair-only and start-safe writes are not this story.
+    # Pair lookup stays absent. Start-safe writes live in the same module.
     for name in _ABSENT_EVENTS:
         assert not hasattr(production_events, name)
         assert not hasattr(events_package, name)
-    assert not hasattr(ProductionEvent, '_assert_starts_resolve')
 
     # The package marker does not import or bind the production events.
     package_tree = ast.parse(Path(events_package.__file__).read_text())
@@ -255,24 +251,18 @@ def test_module_surface():
     for event_cls in (ProductionEvent, *_PRODUCTION_EVENTS):
         assert event_cls.__name__ not in imported_names
 
-    # The event module does not reach grammars, repositories, or PLY.
+    # The event module does not reach repositories or PLY.
     event_tree = ast.parse(Path(inspect.getfile(ProductionEvent)).read_text())
-    event_source = Path(inspect.getfile(ProductionEvent)).read_text()
     for module in _imported_modules(event_tree):
         assert module != 'ply' and not module.startswith('ply.')
         assert not module.startswith('tiferet_ly.repos')
-        assert 'GrammarService' not in module
-        assert 'GrammarRuleSelector' not in module
     event_names = [
         alias.name
         for node in ast.walk(event_tree)
         if isinstance(node, ast.ImportFrom)
         for alias in node.names
     ]
-    assert 'GrammarService' not in event_names
-    assert 'GrammarRuleSelector' not in event_names
     assert 'DomainEvent' in event_names
-    assert '_assert_starts_resolve' not in event_source
 
     # Error identifiers live in this module, not as a package export.
     assert production_events.PRODUCTION_ALREADY_EXISTS_ID == 'PRODUCTION_ALREADY_EXISTS'
