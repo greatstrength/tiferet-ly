@@ -43,10 +43,10 @@ def assert_rule_sequence(entries):
 # ** test: domain_exports
 def test_domain_exports():
     '''
-    Export exactly the seven declared-language domain classes.
+    Export the declared-language domain classes and the optional node.
     '''
 
-    # The package surface is exactly the six rule classes and Grammar.
+    # The package surface is the six rule classes, Grammar, and AstNode.
     assert domain.__all__ == [
         'TokenRule',
         'SimpleTokenRule',
@@ -55,6 +55,7 @@ def test_domain_exports():
         'SimpleProductionRule',
         'ComplexProductionRule',
         'Grammar',
+        'AstNode',
     ]
     for name in domain.__all__:
         assert getattr(domain, name).__name__ == name
