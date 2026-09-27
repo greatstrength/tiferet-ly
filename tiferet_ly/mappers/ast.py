@@ -9,6 +9,14 @@ from typing import Any
 from tiferet import Aggregate
 from tiferet_ly.domain.ast import AstNode
 
+# *** constants
+
+# ** constant: default_format_indent
+DEFAULT_FORMAT_INDENT = ''
+
+# ** constant: default_format_indent_step
+DEFAULT_FORMAT_INDENT_STEP = '  '
+
 # *** mappers
 
 # ** mapper: ast_node_aggregate
@@ -119,3 +127,42 @@ class AstNodeAggregate(AstNode, Aggregate):
 
         # Assign the value without formatting the node.
         self.value = value
+
+    # * method: format
+    def format(
+            self,
+            indent: str = DEFAULT_FORMAT_INDENT,
+            step: str = DEFAULT_FORMAT_INDENT_STEP,
+        ) -> str:
+        '''
+        Render this node as one deterministic tree string.
+
+        The kind is always rendered. The value is a following line only
+        when it is not None. Each child is rendered, in order, on the
+        following indented lines. Line and character offsets are omitted.
+
+        :param indent: The prefix for this node's own lines.
+        :type indent: str
+        :param step: The extra indent added for each child level.
+        :type step: str
+        :return: The rendered tree.
+        :rtype: str
+        '''
+
+        # Render the kind. Source span is not part of the string.
+        lines = [f'{indent}{self.kind}']
+
+        # Include the value line only when a value is present.
+        if self.value is not None:
+            lines.append(f'{indent}{self.value}')
+
+        # Render each child beneath this node, in stored order.
+        child_indent = f'{indent}{step}'
+        for child in self.children:
+            lines.append(child.format(
+                indent=child_indent,
+                step=step,
+            ))
+
+        # Join the lines into one string.
+        return '\n'.join(lines)

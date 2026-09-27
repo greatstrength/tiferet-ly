@@ -40,22 +40,27 @@ def _imported_modules(tree: ast.AST) -> list[str]:
 
 # *** tests
 
-# ** test: module_does_not_define_format_or_import_ply
-def test_module_does_not_define_format_or_import_ply():
+# ** test: module_does_not_import_ply
+def test_module_does_not_import_ply():
     '''
-    Keep the aggregate factory free of format and PLY.
+    Keep the aggregate factory free of PLY.
     '''
 
-    # The mapper defines the aggregate and neither format nor a config object.
+    # The mapper defines the aggregate, including format, and no config object.
     tree = ast.parse(Path(ast_mappers.__file__).read_text())
     defined = [
         node.name
         for node in ast.walk(tree)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
     ]
-    assert defined == ['AstNodeAggregate', 'new', 'leaf', 'add_child', 'set_value']
-    assert 'format' not in defined
-    assert 'format' not in AstNodeAggregate.__dict__
+    assert defined == [
+        'AstNodeAggregate',
+        'new',
+        'leaf',
+        'add_child',
+        'set_value',
+        'format',
+    ]
     assert 'format' not in AstNodeAggregate.model_fields
 
     # The module does not import ply.
