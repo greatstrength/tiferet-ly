@@ -1,0 +1,45 @@
+features:
+  lex:
+    default:
+      name: Lex Text
+      description: Collect declared catalogues, then read text as lexemes.
+      steps:
+        - name: List tokens
+          service_id: list_tokens_event
+          data_key: tokens
+        - name: List productions
+          service_id: list_productions_event
+          data_key: productions
+        - name: List grammars
+          service_id: list_grammars_event
+          data_key: grammars
+        - name: Lex text
+          service_id: lex_text_event
+          params:
+            grammar_id: '$r.grammar_id'
+            text: '$r.text'
+            tokens: '$r.tokens'
+            productions: '$r.productions'
+            grammars: '$r.grammars'
+  parse:
+    default:
+      name: Parse Text
+      description: Collect declared catalogues, then read text into a parse result.
+      steps:
+        - name: List tokens
+          service_id: list_tokens_event
+          data_key: tokens
+        - name: List productions
+          service_id: list_productions_event
+          data_key: productions
+        - name: List grammars
+          service_id: list_grammars_event
+          data_key: grammars
+        - name: Parse text
+          service_id: parse_text_event
+          params:
+            grammar_id: '$r.grammar_id'
+            text: '$r.text'
+            tokens: '$r.tokens'
+            productions: '$r.productions'
+            grammars: '$r.grammars'

@@ -202,7 +202,7 @@ def test_remove_grammar_shape():
     assert RemoveGrammar.__module__ == 'tiferet_ly.events.grammar'
     assert not hasattr(events_package, 'RemoveGrammar')
 
-    # Create and update events remain. This story adds no other event classes.
+    # Create and update events remain. ListGrammars is the later catalogue read.
     assert GrammarEvent._verify_start_resolves
     for event_cls in (AddGrammar, SetGrammarStart, SetGrammarParentIds):
         assert event_cls.__module__ == 'tiferet_ly.events.grammar'
@@ -218,11 +218,11 @@ def test_remove_grammar_shape():
         'SetGrammarParentIds',
         'SetGrammarStart',
         'RemoveGrammar',
+        'ListGrammars',
     }
     assert 'AddToken' not in class_names
     assert 'AddProduction' not in class_names
     assert 'GetGrammar' not in class_names
-    assert 'ListGrammars' not in class_names
 
 # ** test: remove_grammar_parent_reference
 def test_remove_grammar_parent_reference():

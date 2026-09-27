@@ -442,3 +442,28 @@ class RemoveGrammar(GrammarEvent):
 
         # Return the identifier. Do not return None.
         return id
+
+# ** event: list_grammars
+class ListGrammars(GrammarEvent):
+    '''
+    Return every stored grammar in declared order.
+
+    The list is not filtered.
+    '''
+
+    # * method: execute
+    def execute(
+            self,
+            **kwargs,
+        ) -> list[GrammarAggregate]:
+        '''
+        Return the grammar catalogue in the order the service already has.
+
+        :param kwargs: Additional keyword arguments. A grammar id is ignored.
+        :type kwargs: dict
+        :return: The stored grammar aggregates.
+        :rtype: list[GrammarAggregate]
+        '''
+
+        # Do not sort or drop rows. Declared order is the service order.
+        return self.grammar_service.list()
