@@ -13,6 +13,7 @@ from tiferet_ly.assets.translation import (
     ACTION_COMPILATION_FAILED_ID,
     RULE_PATTERN_INVALID_ID,
 )
+from tiferet_ly.mappers.ast import AstNodeAggregate
 from tiferet_ly.mappers.production import (
     ComplexProductionRuleAggregate,
     SimpleProductionRuleAggregate,
@@ -37,20 +38,28 @@ class RuleTranslator:
     a grammar, persist rules, or import PLY.
     '''
 
-    # * method: _compile_action (static)
-    @staticmethod
+    # * attribute: default_rewrites
+    DEFAULT_REWRITES = {
+        '$ast': AstNodeAggregate,
+    }
+
+    # * method: _compile_action (classmethod)
+    @classmethod
     def _compile_action(
+            cls,
             rule_name: str,
             pattern: str,
             action: str,
+            rewrites: dict | None = None,
         ) -> Callable:
         '''
         Compile action source into a new one-argument function.
 
         An invalid regular expression is rejected before the action is
-        compiled. Token actions may name the argument ``t``; production
-        actions may name it ``p``. Both names refer to the single
-        positional argument.
+        compiled. Declared ``$`` names are rewritten before compilation,
+        longer keys first, and bound in the function namespace. Token
+        actions may name the argument ``t``; production actions may name
+        it ``p``. Both names refer to the single positional argument.
 
         :param rule_name: The declared rule name used to name the function.
         :type rule_name: str
@@ -58,6 +67,8 @@ class RuleTranslator:
         :type pattern: str
         :param action: The declared action source.
         :type action: str
+        :param rewrites: Optional rewrite table merged over the default.
+        :type rewrites: dict | None
         :return: A new function named from the rule.
         :rtype: Callable
         '''
@@ -74,8 +85,34 @@ class RuleTranslator:
                 rule_name=rule_name,
             )
 
+        # Merge caller rewrites over the default. Do not mutate the default.
+        table = dict(cls.DEFAULT_REWRITES)
+        if rewrites:
+            table.update(rewrites)
+
+        # Two different bindings cannot share a name in the compiled namespace.
+        bound = {}
+        for value in table.values():
+            bound_name = getattr(value, '__name__', None)
+            previous = bound.get(bound_name)
+            if previous is not None and previous is not value:
+                ServiceError.raise_for(
+                    RuleTranslator,
+                    ACTION_COMPILATION_FAILED_ID,
+                    message='Rewrite values cannot share a binding name.',
+                    rule_name=rule_name,
+                    rewrite_name=bound_name,
+                )
+            bound[bound_name] = value
+
+        # Rewrite longer keys first, and only as whole identifiers.
+        rewritten = action
+        for key in sorted(table, key=len, reverse=True):
+            token = re.compile(re.escape(key) + r'(?![A-Za-z0-9_])')
+            rewritten = token.sub(table[key].__name__, rewritten)
+
         # Bind the one positional argument to both t and p, then indent the action.
-        body = indent(dedent(action).strip('\n'), '    ')
+        body = indent(dedent(rewritten).strip('\n'), '    ')
         source = (
             'def _compiled_action(t):\n'
             '    p = t\n'
@@ -83,7 +120,10 @@ class RuleTranslator:
         )
 
         # Compile the action. A syntax error names the rule and the SyntaxError.
-        namespace = {}
+        namespace = {
+            value.__name__: value
+            for value in bound.values()
+        }
         try:
             code = compile(source, f'<rule:{rule_name}>', 'exec')
             exec(code, namespace)
@@ -106,9 +146,10 @@ class RuleTranslator:
         # Return a distinct function object for this call.
         return function
 
-    # * method: translate_token_rule (static)
-    @staticmethod
+    # * method: translate_token_rule (classmethod)
+    @classmethod
     def translate_token_rule(
+            cls,
             rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate,
         ) -> tuple[str, str | Callable]:
         '''
@@ -133,7 +174,7 @@ class RuleTranslator:
             return token_name, rule.pattern
 
         # Compile a complex token. Invalid patterns fail before synthesis.
-        function = RuleTranslator._compile_action(
+        function = cls._compile_action(
             rule.name,
             rule.pattern,
             rule.action,
@@ -160,9 +201,10 @@ class RuleTranslator:
         # Copy names in input order without filtering or sorting.
         return [rule.name for rule in rules]
 
-    # * method: translate_production_rule (static)
-    @staticmethod
+    # * method: translate_production_rule (classmethod)
+    @classmethod
     def translate_production_rule(
+            cls,
             rule: SimpleProductionRuleAggregate | ComplexProductionRuleAggregate,
         ) -> tuple[str, Callable]:
         '''
@@ -191,7 +233,7 @@ class RuleTranslator:
             return production_name, function
 
         # Compile a complex production through the shared action compiler.
-        function = RuleTranslator._compile_action(
+        function = cls._compile_action(
             rule.name,
             rule.spec,
             rule.action,
