@@ -3,4 +3,6 @@
 # *** imports
 
 # ** app
-from . import error, grammar
+from . import error
+from . import grammar
+from . import translation
