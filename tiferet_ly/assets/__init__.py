@@ -4,3 +4,4 @@
 
 # ** app
 from . import grammar
+from . import translation
