@@ -9,8 +9,16 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
 
+# ** infra
+import pytest
+import yaml
+
 # ** app
-import tiferet_ly.assets as assets
+from tests.assets.core import (
+    CLI_DATA,
+    DI_DATA,
+    FEATURE_DATA,
+)
 from tiferet.contexts.feature import FeatureContext
 from tiferet.contexts.request import RequestContext
 from tiferet.repos.cli import CliConfigRepository
@@ -25,18 +33,6 @@ from tiferet_ly.mappers.token import SimpleTokenRuleAggregate
 from tiferet_ly.utils.parse import PlyParser
 
 # *** constants
-
-# ** constant: assets_dir
-_ASSETS = Path(assets.__file__).parent
-
-# ** constant: feature_config
-_FEATURE_YML = _ASSETS / 'feature.yml'
-
-# ** constant: di_config
-_DI_YML = _ASSETS / 'di.yml'
-
-# ** constant: cli_config
-_CLI_YML = _ASSETS / 'cli.yml'
 
 # ** constant: collect_steps
 _COLLECT = (
@@ -63,34 +59,38 @@ _RENDER_PARAMS = {
 # *** functions
 
 # ** function: registered
-def _registered(service_id: str) -> type:
+def _registered(service_id: str, di_config_file: Path) -> type:
     '''
     Import the class registered for a service id.
 
     :param service_id: The DI registration identifier.
     :type service_id: str
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     :return: The registered class.
     :rtype: type
     '''
 
-    # The package registration is the source of the class, not a local import.
-    registration = DIConfigRepository(str(_DI_YML)).get_registration(service_id)
+    # The written registration is the source of the class, not a local import.
+    registration = DIConfigRepository(str(di_config_file)).get_registration(service_id)
     assert registration is not None
     return registration.get_service_type()
 
 # ** function: feature
-def _feature(feature_id: str):
+def _feature(feature_id: str, feature_yaml_file: Path):
     '''
-    Load one feature from the package feature configuration.
+    Load one feature from the written feature configuration.
 
     :param feature_id: The feature identifier.
     :type feature_id: str
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
     :return: The loaded feature aggregate.
     :rtype: object
     '''
 
     # Load through the framework repository so the YAML schema is the contract.
-    feature = FeatureConfigRepository(str(_FEATURE_YML)).get(feature_id)
+    feature = FeatureConfigRepository(str(feature_yaml_file)).get(feature_id)
     assert feature is not None
     return feature
 
@@ -172,6 +172,8 @@ def _run_parse(
         productions: list,
         grammars: list,
         parser,
+        feature_yaml_file: Path,
+        di_config_file: Path,
     ):
     '''
     Run ``parse.default`` with catalogue services and the registered parser.
@@ -186,6 +188,10 @@ def _run_parse(
     :type grammars: list
     :param parser: The parser service instance.
     :type parser: ParserService
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     :return: The feature result.
     :rtype: object
     '''
@@ -200,11 +206,11 @@ def _run_parse(
 
     # The render step has no constructor dependency.
     wired = {
-        'list_tokens_event': _registered('list_tokens_event')(token_service),
-        'list_productions_event': _registered('list_productions_event')(production_service),
-        'list_grammars_event': _registered('list_grammars_event')(grammar_service),
-        'parse_text_event': _registered('parse_text_event')(parser),
-        'render_result_event': _registered('render_result_event')(),
+        'list_tokens_event': _registered('list_tokens_event', di_config_file)(token_service),
+        'list_productions_event': _registered('list_productions_event', di_config_file)(production_service),
+        'list_grammars_event': _registered('list_grammars_event', di_config_file)(grammar_service),
+        'parse_text_event': _registered('parse_text_event', di_config_file)(parser),
+        'render_result_event': _registered('render_result_event', di_config_file)(),
     }
 
     def get_dependency(service_id, *flags):
@@ -213,7 +219,7 @@ def _run_parse(
 
     # The last step's return is the feature result.
     context = FeatureContext.from_domain(
-        _feature('parse.default'),
+        _feature('parse.default', feature_yaml_file),
         get_dependency=get_dependency,
     )
     request = RequestContext(data=dict(data))
@@ -242,16 +248,86 @@ def _record_parse(parser) -> dict:
     parser.parse = wrapper
     return recorded
 
+# *** fixtures
+
+# ** fixture: feature_yaml_file
+@pytest.fixture
+def feature_yaml_file(tmp_path: Path) -> Path:
+    '''
+    Write the reader feature document to a temporary file.
+
+    :param tmp_path: The pytest temporary directory.
+    :type tmp_path: Path
+    :return: The written feature configuration path.
+    :rtype: Path
+    '''
+
+    # Persist a real .yml file. Do not sort keys.
+    path = tmp_path / 'feature.yml'
+    path.write_text(
+        yaml.safe_dump(FEATURE_DATA, sort_keys=False),
+        encoding='utf-8',
+    )
+    return path
+
+# ** fixture: di_config_file
+@pytest.fixture
+def di_config_file(tmp_path: Path) -> Path:
+    '''
+    Write the reader DI document to a temporary file.
+
+    :param tmp_path: The pytest temporary directory.
+    :type tmp_path: Path
+    :return: The written DI configuration path.
+    :rtype: Path
+    '''
+
+    # Persist a real .yml file. Do not sort keys.
+    path = tmp_path / 'di.yml'
+    path.write_text(
+        yaml.safe_dump(DI_DATA, sort_keys=False),
+        encoding='utf-8',
+    )
+    return path
+
+# ** fixture: cli_yaml_file
+@pytest.fixture
+def cli_yaml_file(tmp_path: Path) -> Path:
+    '''
+    Write the parse CLI document to a temporary file.
+
+    :param tmp_path: The pytest temporary directory.
+    :type tmp_path: Path
+    :return: The written CLI configuration path.
+    :rtype: Path
+    '''
+
+    # Persist a real .yml file. Do not sort keys.
+    path = tmp_path / 'cli.yml'
+    path.write_text(
+        yaml.safe_dump(CLI_DATA, sort_keys=False),
+        encoding='utf-8',
+    )
+    return path
+
 # *** tests
 
 # ** test: parse_default_has_one_terminal_render_step
-def test_parse_default_has_one_terminal_render_step():
+def test_parse_default_has_one_terminal_render_step(
+        feature_yaml_file,
+        di_config_file,
+    ):
     '''
     End parse at one unconditional render step, and do not add ReturnResult.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     # The reader stores p[0]. The next step is the only render step.
-    feature = _feature('parse.default')
+    feature = _feature('parse.default', feature_yaml_file)
     assert [(step.service_id, step.data_key) for step in feature.steps] == [
         *_COLLECT,
         ('parse_text_event', 'result'),
@@ -262,7 +338,7 @@ def test_parse_default_has_one_terminal_render_step():
     assert feature.steps[-1].condition is None
     assert all(step.condition is None for step in feature.steps)
     assert sum(step.service_id == 'render_result_event' for step in feature.steps) == 1
-    assert _registered('render_result_event') is RenderResult
+    assert _registered('render_result_event', di_config_file) is RenderResult
 
     # The flag is an optional schema parameter, not a request key or a condition.
     schema = feature.params_schema
@@ -277,8 +353,8 @@ def test_parse_default_has_one_terminal_render_step():
     assert schema.coerce({'render_result': True})['render_result'] is True
 
     # Configuration does not name ReturnResult or import PLY.
-    feature_text = _FEATURE_YML.read_text()
-    di_text = _DI_YML.read_text()
+    feature_text = feature_yaml_file.read_text()
+    di_text = di_config_file.read_text()
     assert 'ReturnResult' not in feature_text
     assert 'ReturnResult' not in di_text
     assert 'condition:' not in feature_text
@@ -288,16 +364,24 @@ def test_parse_default_has_one_terminal_render_step():
     assert di_text.count('class_name: RenderResult') == 1
 
 # ** test: omitted_or_false_returns_raw_value
-def test_omitted_or_false_returns_raw_value():
+def test_omitted_or_false_returns_raw_value(
+        feature_yaml_file,
+        di_config_file,
+    ):
     '''
     Return the raw p[0] when the flag is omitted or false.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     tokens, productions, grammars = _int_catalogues()
 
     def once(data):
         # A fresh parser so each path is compared to its own p[0].
-        parser = _registered('parser_service')()
+        parser = _registered('parser_service', di_config_file)()
         recorded = _record_parse(parser)
         result = _run_parse(
             data,
@@ -305,6 +389,8 @@ def test_omitted_or_false_returns_raw_value():
             productions,
             grammars,
             parser,
+            feature_yaml_file,
+            di_config_file,
         )
         return result, recorded['value']
 
@@ -330,14 +416,22 @@ def test_omitted_or_false_returns_raw_value():
     assert type(explicit) is int
 
 # ** test: true_returns_string_and_formats_aggregate
-def test_true_returns_string_and_formats_aggregate():
+def test_true_returns_string_and_formats_aggregate(
+        feature_yaml_file,
+        di_config_file,
+    ):
     '''
     Return a string when the flag is true, formatting an aggregate.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     # A non-aggregate uses its ordinary string form, not format().
     tokens, productions, grammars = _int_catalogues()
-    parser = _registered('parser_service')()
+    parser = _registered('parser_service', di_config_file)()
     with patch.object(AstNodeAggregate, 'format') as format_node:
         rendered = _run_parse(
             {
@@ -349,6 +443,8 @@ def test_true_returns_string_and_formats_aggregate():
             productions,
             grammars,
             parser,
+            feature_yaml_file,
+            di_config_file,
         )
     format_node.assert_not_called()
     assert rendered == '3'
@@ -356,7 +452,7 @@ def test_true_returns_string_and_formats_aggregate():
 
     # An aggregate p[0] is rendered with format(), not str(node).
     tokens, productions, grammars = _node_catalogues()
-    parser = _registered('parser_service')()
+    parser = _registered('parser_service', di_config_file)()
     recorded = _record_parse(parser)
     raw = _run_parse(
         {
@@ -367,6 +463,8 @@ def test_true_returns_string_and_formats_aggregate():
         productions,
         grammars,
         parser,
+        feature_yaml_file,
+        di_config_file,
     )
     assert raw is recorded['value']
     assert isinstance(raw, AstNodeAggregate)
@@ -391,6 +489,8 @@ def test_true_returns_string_and_formats_aggregate():
             productions,
             grammars,
             parser,
+            feature_yaml_file,
+            di_config_file,
         )
     assert rendered == expected
     assert type(rendered) is str
@@ -408,13 +508,16 @@ def test_parser_service_parse_remains_any():
     assert inspect.signature(PlyParser.parse).return_annotation is Any
 
 # ** test: lex_default_is_unchanged
-def test_lex_default_is_unchanged():
+def test_lex_default_is_unchanged(feature_yaml_file):
     '''
     Leave the lex feature without a render step or schema.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
     '''
 
     # The reader is still terminal, and the flag is not declared here.
-    lex = _feature('lex.default')
+    lex = _feature('lex.default', feature_yaml_file)
     assert lex.params_schema is None
     assert [(step.service_id, step.data_key) for step in lex.steps] == [
         *_COLLECT,
@@ -425,13 +528,16 @@ def test_lex_default_is_unchanged():
     assert not any(step.service_id == 'render_result_event' for step in lex.steps)
 
 # ** test: cli_render_result_is_store_true
-def test_cli_render_result_is_store_true():
+def test_cli_render_result_is_store_true(cli_yaml_file):
     '''
     Expose ``--render-result`` as a store_true flag with dest ``render_result``.
+
+    :param cli_yaml_file: The temporary CLI document.
+    :type cli_yaml_file: Path
     '''
 
     # The command id is the feature id. The flag is the only argument.
-    command = CliConfigRepository(str(_CLI_YML)).get('parse.default')
+    command = CliConfigRepository(str(cli_yaml_file)).get('parse.default')
     assert command is not None
     assert command.id == 'parse.default'
     assert len(command.arguments) == 1
@@ -446,4 +552,4 @@ def test_cli_render_result_is_store_true():
     parser.add_argument(*argument.name_or_flags, **argument.to_argparse_kwargs())
     assert parser.parse_args([]).render_result is False
     assert parser.parse_args(['--render-result']).render_result is True
-    assert 'import ply' not in _CLI_YML.read_text()
+    assert 'import ply' not in cli_yaml_file.read_text()

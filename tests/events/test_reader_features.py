@@ -9,10 +9,14 @@ from unittest.mock import Mock, patch
 
 # ** infra
 import pytest
+import yaml
 
 # ** app
-import tiferet_ly.assets as assets
 import tiferet_ly.events as events_package
+from tests.assets.core import (
+    DI_DATA,
+    FEATURE_DATA,
+)
 from tiferet import DomainEvent, TiferetError
 from tiferet.contexts.feature import FeatureContext
 from tiferet.contexts.request import RequestContext
@@ -32,15 +36,6 @@ from tiferet_ly.utils.lex import PlyLexer
 from tiferet_ly.utils.parse import PlyParser
 
 # *** constants
-
-# ** constant: assets_dir
-_ASSETS = Path(assets.__file__).parent
-
-# ** constant: feature_config
-_FEATURE_YML = _ASSETS / 'feature.yml'
-
-# ** constant: di_config
-_DI_YML = _ASSETS / 'di.yml'
 
 # ** constant: events_dir
 _EVENTS = Path(events_package.__file__).parent
@@ -84,34 +79,38 @@ def _imported_modules(tree: ast.AST) -> list[str]:
     return modules
 
 # ** function: registered
-def _registered(service_id: str) -> type:
+def _registered(service_id: str, di_config_file: Path) -> type:
     '''
     Import the class registered for a service id.
 
     :param service_id: The DI registration identifier.
     :type service_id: str
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     :return: The registered class.
     :rtype: type
     '''
 
-    # The package registration is the source of the class, not a local import.
-    registration = DIConfigRepository(str(_DI_YML)).get_registration(service_id)
+    # The written registration is the source of the class, not a local import.
+    registration = DIConfigRepository(str(di_config_file)).get_registration(service_id)
     assert registration is not None
     return registration.get_service_type()
 
 # ** function: feature
-def _feature(feature_id: str):
+def _feature(feature_id: str, feature_yaml_file: Path):
     '''
-    Load one feature from the package feature configuration.
+    Load one feature from the written feature configuration.
 
     :param feature_id: The feature identifier.
     :type feature_id: str
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
     :return: The loaded feature aggregate.
     :rtype: object
     '''
 
     # Load through the framework repository so the YAML schema is the contract.
-    feature = FeatureConfigRepository(str(_FEATURE_YML)).get(feature_id)
+    feature = FeatureConfigRepository(str(feature_yaml_file)).get(feature_id)
     assert feature is not None
     return feature
 
@@ -166,6 +165,8 @@ def _run_feature(
         grammars: list,
         lexer,
         parser,
+        feature_yaml_file: Path,
+        di_config_file: Path,
     ):
     '''
     Run a reader feature with catalogue services and the registered readers.
@@ -184,6 +185,10 @@ def _run_feature(
     :type lexer: LexerService
     :param parser: The parser service instance.
     :type parser: ParserService
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     :return: The feature result.
     :rtype: object
     '''
@@ -198,12 +203,12 @@ def _run_feature(
 
     # Events come from the DI registration, wired to those services.
     wired = {
-        'list_tokens_event': _registered('list_tokens_event')(token_service),
-        'list_productions_event': _registered('list_productions_event')(production_service),
-        'list_grammars_event': _registered('list_grammars_event')(grammar_service),
-        'lex_text_event': _registered('lex_text_event')(lexer),
-        'parse_text_event': _registered('parse_text_event')(parser),
-        'render_result_event': _registered('render_result_event')(),
+        'list_tokens_event': _registered('list_tokens_event', di_config_file)(token_service),
+        'list_productions_event': _registered('list_productions_event', di_config_file)(production_service),
+        'list_grammars_event': _registered('list_grammars_event', di_config_file)(grammar_service),
+        'lex_text_event': _registered('lex_text_event', di_config_file)(lexer),
+        'parse_text_event': _registered('parse_text_event', di_config_file)(parser),
+        'render_result_event': _registered('render_result_event', di_config_file)(),
     }
 
     def get_dependency(service_id, *flags):
@@ -211,7 +216,7 @@ def _run_feature(
         return wired[service_id]
 
     # Execute the loaded feature. The last step's return is the feature result.
-    feature = _feature(feature_id)
+    feature = _feature(feature_id, feature_yaml_file)
     context = FeatureContext.from_domain(
         feature,
         get_dependency=get_dependency,
@@ -246,12 +251,57 @@ def _record(service, method_name: str) -> dict:
     setattr(service, method_name, wrapper)
     return recorded
 
+# *** fixtures
+
+# ** fixture: feature_yaml_file
+@pytest.fixture
+def feature_yaml_file(tmp_path: Path) -> Path:
+    '''
+    Write the reader feature document to a temporary file.
+
+    :param tmp_path: The pytest temporary directory.
+    :type tmp_path: Path
+    :return: The written feature configuration path.
+    :rtype: Path
+    '''
+
+    # Persist a real .yml file. Do not sort keys.
+    path = tmp_path / 'feature.yml'
+    path.write_text(
+        yaml.safe_dump(FEATURE_DATA, sort_keys=False),
+        encoding='utf-8',
+    )
+    return path
+
+# ** fixture: di_config_file
+@pytest.fixture
+def di_config_file(tmp_path: Path) -> Path:
+    '''
+    Write the reader DI document to a temporary file.
+
+    :param tmp_path: The pytest temporary directory.
+    :type tmp_path: Path
+    :return: The written DI configuration path.
+    :rtype: Path
+    '''
+
+    # Persist a real .yml file. Do not sort keys.
+    path = tmp_path / 'di.yml'
+    path.write_text(
+        yaml.safe_dump(DI_DATA, sort_keys=False),
+        encoding='utf-8',
+    )
+    return path
+
 # *** tests
 
 # ** test: list_grammars_returns_service_list_and_is_not_exported
-def test_list_grammars_returns_service_list_and_is_not_exported():
+def test_list_grammars_returns_service_list_and_is_not_exported(di_config_file):
     '''
     Return the grammar service list in that order, and do not export it.
+
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     # Service order is not alphabetical. A sort would put ``a`` first.
@@ -270,7 +320,7 @@ def test_list_grammars_returns_service_list_and_is_not_exported():
     assert result == [first, second]
     assert [grammar.id for grammar in result] == ['z', 'a']
     service.list.assert_called_once_with()
-    assert _registered('list_grammars_event') is ListGrammars
+    assert _registered('list_grammars_event', di_config_file) is ListGrammars
 
     # New events stay on their modules. The package does not re-export them.
     assert not hasattr(events_package, 'ListGrammars')
@@ -288,9 +338,17 @@ def test_list_grammars_returns_service_list_and_is_not_exported():
     assert 'ParseText' not in imported_names
 
 # ** test: features_collect_then_call_the_reader
-def test_features_collect_then_call_the_reader():
+def test_features_collect_then_call_the_reader(
+        feature_yaml_file,
+        di_config_file,
+    ):
     '''
     Collect through the three list events, then call the reader event.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     # Both features collect, then call the reader. Parse stores that value.
@@ -298,7 +356,7 @@ def test_features_collect_then_call_the_reader():
         ('lex.default', 'lex_text_event', None),
         ('parse.default', 'parse_text_event', 'result'),
     ):
-        feature = _feature(feature_id)
+        feature = _feature(feature_id, feature_yaml_file)
         assert feature.id == feature_id
         reader = next(step for step in feature.steps if step.service_id == reader_id)
         assert reader.data_key == reader_data_key
@@ -308,30 +366,38 @@ def test_features_collect_then_call_the_reader():
         assert not any(step.service_id == 'get_grammar_event' for step in feature.steps)
 
     # Lex still ends at the reader. Parse rendering is a later step.
-    lex = _feature('lex.default')
+    lex = _feature('lex.default', feature_yaml_file)
     assert [(step.service_id, step.data_key) for step in lex.steps] == [
         *_COLLECT,
         ('lex_text_event', None),
     ]
 
     # DI names the concrete readers. Events stay behind those service ids.
-    assert _registered('lexer_service') is PlyLexer
-    assert _registered('parser_service') is PlyParser
+    assert _registered('lexer_service', di_config_file) is PlyLexer
+    assert _registered('parser_service', di_config_file) is PlyParser
     assert issubclass(PlyLexer, LexerService)
     assert issubclass(PlyParser, ParserService)
-    assert _registered('lex_text_event') is LexText
-    assert _registered('parse_text_event') is ParseText
+    assert _registered('lex_text_event', di_config_file) is LexText
+    assert _registered('parse_text_event', di_config_file) is ParseText
 
 # ** test: lex_default_returns_lexer_service_tokens
-def test_lex_default_returns_lexer_service_tokens():
+def test_lex_default_returns_lexer_service_tokens(
+        feature_yaml_file,
+        di_config_file,
+    ):
     '''
     Return the lexeme list produced by LexerService.tokenize.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     tokens, productions, grammars = _catalogues()
     rewrites = {'ignored': True}
-    lexer = _registered('lexer_service')()
-    parser = _registered('parser_service')()
+    lexer = _registered('lexer_service', di_config_file)()
+    parser = _registered('parser_service', di_config_file)()
     recorded = _record(lexer, 'tokenize')
 
     result = _run_feature(
@@ -346,6 +412,8 @@ def test_lex_default_returns_lexer_service_tokens():
         grammars,
         lexer,
         parser,
+        feature_yaml_file,
+        di_config_file,
     )
 
     # The feature returns that call's list, not a copy or a parse value.
@@ -360,14 +428,22 @@ def test_lex_default_returns_lexer_service_tokens():
     assert recorded['kwargs']['rewrites'] is rewrites
 
 # ** test: parse_default_returns_parser_service_value
-def test_parse_default_returns_parser_service_value():
+def test_parse_default_returns_parser_service_value(
+        feature_yaml_file,
+        di_config_file,
+    ):
     '''
     Return the Any value produced by ParserService.parse.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     tokens, productions, grammars = _catalogues()
-    lexer = _registered('lexer_service')()
-    parser = _registered('parser_service')()
+    lexer = _registered('lexer_service', di_config_file)()
+    parser = _registered('parser_service', di_config_file)()
     recorded = _record(parser, 'parse')
 
     result = _run_feature(
@@ -381,6 +457,8 @@ def test_parse_default_returns_parser_service_value():
         grammars,
         lexer,
         parser,
+        feature_yaml_file,
+        di_config_file,
     )
 
     # The feature returns that call's value. It is not forced into a lexeme list.
@@ -391,14 +469,22 @@ def test_parse_default_returns_parser_service_value():
     assert recorded['kwargs']['rewrites'] is None
 
 # ** test: unknown_grammar_raises_before_ply
-def test_unknown_grammar_raises_before_ply():
+def test_unknown_grammar_raises_before_ply(
+        feature_yaml_file,
+        di_config_file,
+    ):
     '''
     Raise GRAMMAR_NOT_FOUND_ID for an unknown grammar before PLY is called.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
+    :param di_config_file: The temporary DI document.
+    :type di_config_file: Path
     '''
 
     tokens, productions, grammars = _catalogues()
-    lexer = _registered('lexer_service')()
-    parser = _registered('parser_service')()
+    lexer = _registered('lexer_service', di_config_file)()
+    parser = _registered('parser_service', di_config_file)()
     lexer_calls = []
     parser_calls = []
     lexer.tokenize = lambda *args, **kwargs: lexer_calls.append(args)
@@ -422,6 +508,8 @@ def test_unknown_grammar_raises_before_ply():
                     grammars,
                     lexer,
                     parser,
+                    feature_yaml_file,
+                    di_config_file,
                 )
             assert caught.value.error_code == GRAMMAR_NOT_FOUND_ID
             assert caught.value.kwargs['grammar_id'] == 'missing'
@@ -435,9 +523,12 @@ def test_unknown_grammar_raises_before_ply():
         ply_yacc.assert_not_called()
 
 # ** test: feature_and_event_modules_do_not_import_ply
-def test_feature_and_event_modules_do_not_import_ply():
+def test_feature_and_event_modules_do_not_import_ply(feature_yaml_file):
     '''
     Keep PLY out of the feature configuration and the event modules.
+
+    :param feature_yaml_file: The temporary feature document.
+    :type feature_yaml_file: Path
     '''
 
     # Scan every event module. A reader utility import would pull PLY in.
@@ -452,6 +543,6 @@ def test_feature_and_event_modules_do_not_import_ply():
             )
 
     # The feature file is configuration. It does not import PLY.
-    feature_text = _FEATURE_YML.read_text()
+    feature_text = feature_yaml_file.read_text()
     assert 'import ply' not in feature_text
     assert 'ply.' not in feature_text
