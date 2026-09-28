@@ -1,0 +1,86 @@
+errors:
+  TOKEN_ALREADY_EXISTS:
+    name: Token Already Exists
+    message:
+      - lang: en_US
+        text: 'Token already exists: {name} in grammar {grammar_id}.'
+  TOKEN_NOT_FOUND:
+    name: Token Not Found
+    message:
+      - lang: en_US
+        text: 'Token not found: {name} in grammar {grammar_id}.'
+  TOKEN_ACTION_NOT_SUPPORTED:
+    name: Token Action Not Supported
+    message:
+      - lang: en_US
+        text: 'Token action is not supported: {name} in grammar {grammar_id}.'
+  PRODUCTION_ALREADY_EXISTS:
+    name: Production Already Exists
+    message:
+      - lang: en_US
+        text: 'Production already exists: {name} in grammar {grammar_id}.'
+  PRODUCTION_NOT_FOUND:
+    name: Production Not Found
+    message:
+      - lang: en_US
+        text: 'Production not found: {name} in grammar {grammar_id}.'
+  PRODUCTION_ACTION_NOT_SUPPORTED:
+    name: Production Action Not Supported
+    message:
+      - lang: en_US
+        text: 'Production action is not supported: {name} in grammar {grammar_id}.'
+  GRAMMAR_ALREADY_EXISTS:
+    name: Grammar Already Exists
+    message:
+      - lang: en_US
+        text: 'Grammar {id} already exists.'
+  GRAMMAR_NOT_FOUND:
+    name: Grammar Not Found
+    message:
+      - lang: en_US
+        text: 'Grammar {grammar_id} was not found.'
+  GRAMMAR_CYCLE_DETECTED:
+    name: Grammar Cycle Detected
+    message:
+      - lang: en_US
+        text: 'Grammar {id} would cycle.'
+  GRAMMAR_START_NOT_FOUND:
+    name: Grammar Start Not Found
+    message:
+      - lang: en_US
+        text: 'Grammar start does not resolve.'
+  GRAMMAR_PARENT_NOT_FOUND:
+    name: Grammar Parent Not Found
+    message:
+      - lang: en_US
+        text: 'Grammar parent was not found.'
+  GRAMMAR_STILL_REFERENCED:
+    name: Grammar Still Referenced
+    message:
+      - lang: en_US
+        text: 'Grammar {id} is still referenced.'
+  LEX_ERROR:
+    name: Lex Error
+    message:
+      - lang: en_US
+        text: 'Lexical error in grammar {grammar_id}.'
+  PARSE_ERROR:
+    name: Parse Error
+    message:
+      - lang: en_US
+        text: 'Parse error in grammar {grammar_id}.'
+  READER_BUILD_FAILED:
+    name: Reader Build Failed
+    message:
+      - lang: en_US
+        text: 'Reader could not be built for grammar {grammar_id}.'
+  ACTION_COMPILATION_FAILED:
+    name: Action Compilation Failed
+    message:
+      - lang: en_US
+        text: 'Action source could not be compiled.'
+  RULE_PATTERN_INVALID:
+    name: Rule Pattern Invalid
+    message:
+      - lang: en_US
+        text: 'Rule pattern is not valid.'

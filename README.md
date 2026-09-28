@@ -12,7 +12,13 @@ in a growing file, and the pieces around it can be tested without invoking
 the real parsing engine at all.
 
 ## Documentation
-This project has no implementation yet. Before writing code, start with:
+Declare a language's words and sentence patterns as data. Translate that
+declaration into the form the Lex/Yacc engine expects. Assemble those
+translated rules into a reader. Read text written in the declared language
+and hand back the result.
+
+- [Quick-Start](docs/quick-start.md) — run the checked-in calculator from
+  the repository root.
 - [Domain Vision Statement](docs/domain-vision.md) — what tiferet-ly is for
   and the value it aims to provide.
 - [Core Domain Distillation](docs/core-domain-distillation.md) — the
