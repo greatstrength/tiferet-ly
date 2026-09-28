@@ -203,6 +203,7 @@ def _run_feature(
         'list_grammars_event': _registered('list_grammars_event')(grammar_service),
         'lex_text_event': _registered('lex_text_event')(lexer),
         'parse_text_event': _registered('parse_text_event')(parser),
+        'render_result_event': _registered('render_result_event')(),
     }
 
     def get_dependency(service_id, *flags):
@@ -292,21 +293,26 @@ def test_features_collect_then_call_the_reader():
     Collect through the three list events, then call the reader event.
     '''
 
-    # Both features share the collection steps and do not look up one grammar.
-    for feature_id, reader_id in (
-        ('lex.default', 'lex_text_event'),
-        ('parse.default', 'parse_text_event'),
+    # Both features collect, then call the reader. Parse stores that value.
+    for feature_id, reader_id, reader_data_key in (
+        ('lex.default', 'lex_text_event', None),
+        ('parse.default', 'parse_text_event', 'result'),
     ):
         feature = _feature(feature_id)
         assert feature.id == feature_id
-        assert [(step.service_id, step.data_key) for step in feature.steps] == [
-            *_COLLECT,
-            (reader_id, None),
-        ]
-        assert feature.steps[-1].parameters == _READER_PARAMS
-        assert 'rewrites' not in feature.steps[-1].parameters
+        reader = next(step for step in feature.steps if step.service_id == reader_id)
+        assert reader.data_key == reader_data_key
+        assert reader.parameters == _READER_PARAMS
+        assert 'rewrites' not in reader.parameters
         assert not any('grammar' in step.service_id and 'list_' not in step.service_id for step in feature.steps)
         assert not any(step.service_id == 'get_grammar_event' for step in feature.steps)
+
+    # Lex still ends at the reader. Parse rendering is a later step.
+    lex = _feature('lex.default')
+    assert [(step.service_id, step.data_key) for step in lex.steps] == [
+        *_COLLECT,
+        ('lex_text_event', None),
+    ]
 
     # DI names the concrete readers. Events stay behind those service ids.
     assert _registered('lexer_service') is PlyLexer

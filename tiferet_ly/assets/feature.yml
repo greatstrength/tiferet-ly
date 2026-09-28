@@ -25,6 +25,11 @@ features:
     default:
       name: Parse Text
       description: Collect declared catalogues, then read text into a parse result.
+      params_schema:
+        render_result:
+          type: bool
+          required: false
+          default: false
       steps:
         - name: List tokens
           service_id: list_tokens_event
@@ -37,9 +42,15 @@ features:
           data_key: grammars
         - name: Parse text
           service_id: parse_text_event
+          data_key: result
           params:
             grammar_id: '$r.grammar_id'
             text: '$r.text'
             tokens: '$r.tokens'
             productions: '$r.productions'
             grammars: '$r.grammars'
+        - name: Render result
+          service_id: render_result_event
+          params:
+            result: '$r.result'
+            render_result: '$r.render_result'

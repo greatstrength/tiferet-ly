@@ -27,3 +27,7 @@ services:
     name: Parse Text
     module_path: tiferet_ly.events.reader
     class_name: ParseText
+  render_result_event:
+    name: Render Result
+    module_path: tiferet_ly.events.render
+    class_name: RenderResult
