@@ -1,0 +1,18 @@
+sessions:
+  example:
+    name: Example
+    description: Checked-in calculator application for the quick-start.
+    logger_id: default
+    constants:
+      di_config: configs/di.yml
+      feature_config: configs/feature.yml
+      error_config: configs/error.yml
+      cli_config: configs/cli.yml
+      logging_config: configs/app.yml
+logging:
+  loggers:
+    default:
+      name: Default Logger
+      level: WARNING
+      handlers:
+        - default
