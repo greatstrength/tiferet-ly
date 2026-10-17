@@ -233,6 +233,82 @@ class TestProductionTranslation:
         assert left[0] == 'left'
         assert right[0] == 'right'
 
+    # * test: literal_parenthesis_production_specification
+    def test_literal_parenthesis_production_specification(self, test_ctx, session):
+        '''
+        Compile a production specification that is not a regular expression.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A parenthesized literal is PLY grammar, not a regular expression.
+        rule = ComplexProductionRuleAggregate(
+            name='opening',
+            grammar_id='arithmetic',
+            spec="opening : '('",
+            action='p[0] = p[1]',
+        )
+        production_name, compiled = RuleTranslator.translate_production_rule(rule)
+
+        # The reader name is prefixed and the callable carries the spec.
+        assert production_name == 'p_opening'
+        assert compiled.__name__ == 'opening'
+        assert compiled.__doc__ == "opening : '('"
+
+        # Calling it with one positional argument performs the action.
+        values = [None, '(']
+        compiled(values)
+        assert values[0] == '('
+
+    # * test: production_action_binding
+    def test_production_action_binding(self, test_ctx, session):
+        '''
+        Forward caller rewrites to a complex production and ignore them on a simple production.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Bind an addition helper for the complex production action.
+        def combine(left, right):
+            return left + right
+
+        # A complex production performs the bound rewrite.
+        name, compiled = RuleTranslator.translate_production_rule(
+            ComplexProductionRuleAggregate(
+                name='expr',
+                grammar_id='arithmetic',
+                spec='expr : expr PLUS term',
+                action='p[0] = $combine(p[1], p[3])',
+            ),
+            rewrites={'$combine': combine},
+        )
+        assert name == 'p_expr'
+        values = [None, 1, '+', 2]
+        compiled(values)
+        assert values[0] == 3
+
+        # A simple production remains the manufactured pass-through.
+        name, compiled = RuleTranslator.translate_production_rule(
+            SimpleProductionRuleAggregate(
+                name='expr',
+                grammar_id='arithmetic',
+                spec='expr : term',
+            ),
+            rewrites={'$combine': combine},
+        )
+        assert name == 'p_expr'
+        assert compiled.__doc__ == 'expr : term'
+        values = [None, 'term-value']
+        compiled(values)
+        assert values[0] == 'term-value'
+        assert values[0] is values[1]
+
     # * test: does_not_import_ply_or_redefine_compiler
     def test_does_not_import_ply_or_redefine_compiler(self, test_ctx, session):
         '''

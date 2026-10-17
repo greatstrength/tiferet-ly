@@ -55,11 +55,10 @@ class RuleTranslator:
         '''
         Compile action source into a new one-argument function.
 
-        An invalid regular expression is rejected before the action is
-        compiled. Declared ``$`` names are rewritten before compilation,
-        longer keys first, and bound in the function namespace. Token
-        actions may name the argument ``t``; production actions may name
-        it ``p``. Both names refer to the single positional argument.
+        Declared ``$`` names are rewritten before compilation, longer
+        keys first, and bound in the function namespace. Token actions
+        may name the argument ``t``; production actions may name it
+        ``p``. Both names refer to the single positional argument.
 
         :param rule_name: The declared rule name used to name the function.
         :type rule_name: str
@@ -72,18 +71,6 @@ class RuleTranslator:
         :return: A new function named from the rule.
         :rtype: Callable
         '''
-
-        # Reject an invalid regular expression before compiling the action.
-        try:
-            re.compile(pattern)
-        except re.error as error:
-            ServiceError.raise_for(
-                RuleTranslator,
-                RULE_PATTERN_INVALID_ID,
-                message='Rule pattern is not a valid regular expression.',
-                cause=error,
-                rule_name=rule_name,
-            )
 
         # Merge caller rewrites over the default. Do not mutate the default.
         table = dict(cls.DEFAULT_REWRITES)
@@ -151,17 +138,21 @@ class RuleTranslator:
     def translate_token_rule(
             cls,
             rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate,
+            rewrites: dict | None = None,
         ) -> tuple[str, str | Callable]:
         '''
         Translate one declared token rule into a reader name and value.
 
         A simple token returns its attribute name and the pattern text
         unchanged. A complex token returns a callable from the shared
-        action compiler. An invalid complex pattern is rejected by that
-        compiler before the action is compiled.
+        action compiler. An invalid complex pattern is rejected before
+        the action is compiled. Caller rewrites are forwarded only for a
+        complex token.
 
         :param rule: A simple or complex token aggregate.
         :type rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate
+        :param rewrites: Optional rewrite table forwarded to the compiler.
+        :type rewrites: dict | None
         :return: The ``t_`` name and either the pattern or a callable.
         :rtype: tuple[str, str | Callable]
         '''
@@ -173,11 +164,24 @@ class RuleTranslator:
         if isinstance(rule, SimpleTokenRuleAggregate):
             return token_name, rule.pattern
 
-        # Compile a complex token. Invalid patterns fail before synthesis.
+        # Validate a complex token pattern before compiling the action.
+        try:
+            re.compile(rule.pattern)
+        except re.error as error:
+            ServiceError.raise_for(
+                RuleTranslator,
+                RULE_PATTERN_INVALID_ID,
+                message='Rule pattern is not a valid regular expression.',
+                cause=error,
+                rule_name=rule.name,
+            )
+
+        # Compile a complex token. Forward caller rewrites.
         function = cls._compile_action(
             rule.name,
             rule.pattern,
             rule.action,
+            rewrites=rewrites,
         )
 
         # Return the reader name and the compiled action.
@@ -206,20 +210,25 @@ class RuleTranslator:
     def translate_production_rule(
             cls,
             rule: SimpleProductionRuleAggregate | ComplexProductionRuleAggregate,
+            rewrites: dict | None = None,
         ) -> tuple[str, Callable]:
         '''
         Translate one declared production into a reader name and callable.
 
         A complex production is compiled by the shared action compiler, so
         its docstring is the specification and its call performs the
-        declared action. A simple production stores no action. When its
-        specification has exactly one right-hand-side symbol, a
-        pass-through that assigns ``p[0] = p[1]`` is manufactured here and
-        carries the specification as its docstring. Any other simple
-        specification is rejected and names the rule.
+        declared action. A specification is not a regular expression.
+        Caller rewrites are forwarded only for a complex production. A
+        simple production stores no action. When its specification has
+        exactly one right-hand-side symbol, a pass-through that assigns
+        ``p[0] = p[1]`` is manufactured here and carries the specification
+        as its docstring. Any other simple specification is rejected and
+        names the rule.
 
         :param rule: A simple or complex production aggregate.
         :type rule: SimpleProductionRuleAggregate | ComplexProductionRuleAggregate
+        :param rewrites: Optional rewrite table forwarded to the compiler.
+        :type rewrites: dict | None
         :return: The ``p_`` name and a callable.
         :rtype: tuple[str, Callable]
         '''
@@ -232,11 +241,12 @@ class RuleTranslator:
             function = RuleTranslator._simple_pass_through(rule)
             return production_name, function
 
-        # Compile a complex production through the shared action compiler.
+        # Compile a complex production. Forward caller rewrites.
         function = cls._compile_action(
             rule.name,
             rule.spec,
             rule.action,
+            rewrites=rewrites,
         )
 
         # Return the reader name and the compiled action.

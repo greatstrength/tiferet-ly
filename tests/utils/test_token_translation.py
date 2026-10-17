@@ -141,6 +141,48 @@ class TestTokenTranslation:
         assert error.kwargs['rule_name'] == 'BAD'
         assert not callable(raised.value)
 
+    # * test: token_action_binding
+    def test_token_action_binding(self, test_ctx, session):
+        '''
+        Forward caller rewrites to a complex token and ignore them on a simple token.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Bind an integer conversion for the complex token action.
+        def as_int(value):
+            return int(value)
+
+        # A complex token performs the bound rewrite.
+        name, compiled = RuleTranslator.translate_token_rule(
+            ComplexTokenRuleAggregate(
+                name='NUMBER',
+                grammar_id='arithmetic',
+                pattern=r'\d+',
+                action='t.value = $as_int(t.value)',
+            ),
+            rewrites={'$as_int': as_int},
+        )
+        assert name == 't_NUMBER'
+        token = SimpleNamespace(value='3')
+        compiled(token)
+        assert token.value == 3
+        assert type(token.value) is int
+
+        # A simple token returns its pattern text and is not rewritten.
+        translated = RuleTranslator.translate_token_rule(
+            SimpleTokenRuleAggregate(
+                name='PLUS',
+                grammar_id='arithmetic',
+                pattern='+',
+            ),
+            rewrites={'$as_int': as_int},
+        )
+        assert translated == ('t_PLUS', '+')
+
     # * test: derive_tokens_preserves_order
     def test_derive_tokens_preserves_order(self, test_ctx, session):
         '''

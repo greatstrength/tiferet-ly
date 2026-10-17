@@ -221,3 +221,74 @@ class TestAstRewrite:
         error = raised.value
         assert error.error_code == ACTION_COMPILATION_FAILED_ID
         assert error.kwargs['rewrite_name'] == AstNodeAggregate.__name__
+
+    # * test: function_or_closure_binding
+    def test_function_or_closure_binding(self, test_ctx, session):
+        '''
+        Bind a function or closure under its ``__name__``.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Capture enclosing state so the bound function is a closure.
+        prefix = 'x'
+        def bind(value):
+            return prefix + value
+
+        # Compile an action that calls the bound closure.
+        compiled = RuleTranslator._compile_action(
+            'item',
+            'item : VALUE',
+            'p[0] = $bind(p[1])',
+            rewrites={'$bind': bind},
+        )
+        values = [None, '3']
+        compiled(values)
+
+        # The closure is bound under bind.__name__ and prefixes the value.
+        assert values[0] == 'x3'
+        assert 'bind' in compiled.__code__.co_names
+
+    # * test: default_table_isolation
+    def test_default_table_isolation(self, test_ctx, session):
+        '''
+        Merge caller rewrites without mutating the default table.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Snapshot the published default table before a caller rewrite.
+        original = dict(RuleTranslator.DEFAULT_REWRITES)
+        original_ast = RuleTranslator.DEFAULT_REWRITES['$ast']
+        assert original_ast is AstNodeAggregate
+
+        # A caller binding must not mutate the default table.
+        class Other:
+            '''A caller rewrite that must not mutate the default table.'''
+
+        RuleTranslator._compile_action(
+            'expr',
+            'expr : expr',
+            'p[0] = $other',
+            rewrites={'$other': Other},
+        )
+        assert RuleTranslator.DEFAULT_REWRITES == original
+        assert '$other' not in RuleTranslator.DEFAULT_REWRITES
+        assert RuleTranslator.DEFAULT_REWRITES['$ast'] is original_ast
+
+        # A later compile without caller rewrites still uses the default.
+        compiled = RuleTranslator._compile_action(
+            'expr',
+            'expr : expr PLUS expr',
+            "p[0] = $ast.new('add', [p[1], p[3]])",
+        )
+        values = [None, 'left', '+', 'right']
+        compiled(values)
+        assert type(values[0]) is AstNodeAggregate
+        assert values[0].kind == 'add'
