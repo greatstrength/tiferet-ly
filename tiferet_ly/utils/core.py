@@ -83,6 +83,7 @@ class PlyReader:
             grammar: GrammarAggregate,
             grammars: list[GrammarAggregate],
             tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate],
+            rewrites: dict | None = None,
         ) -> _TokenModule:
         '''
         Install selected token rules in selected order.
@@ -98,6 +99,8 @@ class PlyReader:
         :type grammars: list[GrammarAggregate]
         :param tokens: The declared token catalogue, in input order.
         :type tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate]
+        :param rewrites: Optional rewrites forwarded to token translation. Defaults to None.
+        :type rewrites: dict | None
         :return: A fresh module whose ``tokens`` list is the installed names.
         :rtype: _TokenModule
         '''
@@ -109,11 +112,14 @@ class PlyReader:
             tokens,
         )
 
-        # Install each translation in the selected order. Do not regroup.
+        # Install each translation in the selected order. Forward rewrites.
         module = _TokenModule()
         names = []
         for rule in selected:
-            attribute, value = RuleTranslator.translate_token_rule(rule)
+            attribute, value = RuleTranslator.translate_token_rule(
+                rule,
+                rewrites=rewrites,
+            )
             setattr(module, attribute, value)
             names.append(rule.name)
 
@@ -161,6 +167,7 @@ class PlyReader:
             grammar_id: str,
             grammars: list[GrammarAggregate],
             tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate],
+            rewrites: dict | None = None,
         ):
         '''
         Build a new lexer for one grammar.
@@ -175,6 +182,8 @@ class PlyReader:
         :type grammars: list[GrammarAggregate]
         :param tokens: The declared token catalogue, in input order.
         :type tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate]
+        :param rewrites: Optional rewrites forwarded to token installation. Defaults to None.
+        :type rewrites: dict | None
         :return: A new PLY lexer.
         :rtype: ply.lex.Lexer
         '''
@@ -182,8 +191,13 @@ class PlyReader:
         # Resolve before PLY so a missing grammar never builds a lexer.
         grammar = PlyReader.resolve_grammar(grammar_id, grammars)
 
-        # Install translated tokens in selected order on a fresh module.
-        module = PlyReader.install_tokens(grammar, grammars, tokens)
+        # Install translated tokens in selected order. Forward rewrites.
+        module = PlyReader.install_tokens(
+            grammar,
+            grammars,
+            tokens,
+            rewrites=rewrites,
+        )
 
         # Point lexical failures at the span-bearing helper.
         def t_error(token):

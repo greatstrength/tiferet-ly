@@ -10,3 +10,6 @@ PARSE_ERROR_ID = 'PARSE_ERROR'
 
 # ** constant: reader_build_failed_id
 READER_BUILD_FAILED_ID = 'READER_BUILD_FAILED'
+
+# ** constant: action_execution_failed_id
+ACTION_EXECUTION_FAILED_ID = 'ACTION_EXECUTION_FAILED'
