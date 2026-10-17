@@ -98,10 +98,10 @@ class TestTranslationCompiler:
         compiled(token)
         assert token.value == 3
 
-    # * test: invalid_pattern_does_not_compile_action
-    def test_invalid_pattern_does_not_compile_action(self, test_ctx, session):
+    # * test: compile_action_does_not_validate_pattern_as_regex
+    def test_compile_action_does_not_validate_pattern_as_regex(self, test_ctx, session):
         '''
-        Raise a pattern error before compiling or executing the action.
+        Compile an action whose pattern is not a valid regular expression.
 
         :param test_ctx: The bound generic tester context.
         :type test_ctx: GenericTesterContext
@@ -109,15 +109,17 @@ class TestTranslationCompiler:
         :type session: TestSessionContext
         '''
 
-        # An invalid pattern wins even when the action is not valid Python.
-        with pytest.raises(ServiceError) as raised:
-            RuleTranslator._compile_action('BAD', '[', 'def')
+        # A non-regex pattern is stored as the docstring, not compiled as regex.
+        compiled = RuleTranslator._compile_action('LPAREN', '[', 't.value = 1')
 
-        # The error names the rule and is not an action-compilation failure.
-        error = raised.value
-        assert error.error_code == RULE_PATTERN_INVALID_ID
-        assert error.kwargs['rule_name'] == 'BAD'
-        assert error.error_code != ACTION_COMPILATION_FAILED_ID
+        # The function is named from the rule and carries the pattern.
+        assert compiled.__name__ == 'LPAREN'
+        assert compiled.__doc__ == '['
+
+        # Calling it with one positional argument performs the action.
+        token = SimpleNamespace(value='x')
+        compiled(token)
+        assert token.value == 1
 
     # * test: syntax_error_names_rule_and_cause
     def test_syntax_error_names_rule_and_cause(self, test_ctx, session):
