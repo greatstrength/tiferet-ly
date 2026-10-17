@@ -14,6 +14,7 @@ import pytest
 from tiferet import use_tester
 from tiferet.interfaces.core import ServiceError
 from tiferet_ly.assets.reader import (
+    ACTION_EXECUTION_FAILED_ID,
     LEX_ERROR_ID,
     READER_BUILD_FAILED_ID,
 )
@@ -283,3 +284,122 @@ class TestPlyLexer:
         assert error.error_code == READER_BUILD_FAILED_ID
         assert error.kwargs['grammar_id'] == 'expr'
         assert isinstance(error.__cause__, SyntaxError)
+
+    # * test: caller_rewrite_changes_complex_token_action
+    def test_caller_rewrite_changes_complex_token_action(self, test_ctx, session):
+        '''
+        Apply a caller string binding to a complex token action.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The functions are only the caller binding. The lexeme value stays text.
+        def mark_a(value):
+            return 'a:' + value
+
+        def mark_b(value):
+            return 'b:' + value
+
+        # The action marks the matched text through the caller binding.
+        expr = _grammar('expr')
+        tokens = [
+            ComplexTokenRuleAggregate(
+                name='WORD',
+                grammar_id='expr',
+                pattern='[a-z]+',
+                action='t.value = $mark(t.value)\nreturn t',
+            ),
+        ]
+        marked_a = PlyLexer().tokenize(
+            'expr',
+            'ab',
+            tokens,
+            [],
+            [expr],
+            rewrites={'$mark': mark_a},
+        )
+        marked_b = PlyLexer().tokenize(
+            'expr',
+            'ab',
+            tokens,
+            [],
+            [expr],
+            rewrites={'$mark': mark_b},
+        )
+
+        # The two results differ only because the caller table changed.
+        assert marked_a[0].type == 'WORD'
+        assert marked_a[0].value == 'a:ab'
+        assert type(marked_a[0].value) is str
+        assert marked_b[0].type == 'WORD'
+        assert marked_b[0].value == 'b:ab'
+        assert type(marked_b[0].value) is str
+
+    # * test: action_exception_raises_action_execution_failed
+    def test_action_exception_raises_action_execution_failed(self, test_ctx, session):
+        '''
+        Wrap an action exception as an attributed action failure.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The action raises before it can return the token.
+        expr = _grammar('expr')
+        tokens = [
+            ComplexTokenRuleAggregate(
+                name='WORD',
+                grammar_id='expr',
+                pattern='[a-z]+',
+                action='raise ValueError(\'action failed\')\nreturn t',
+            ),
+        ]
+        with pytest.raises(ServiceError) as raised:
+            PlyLexer().tokenize('expr', 'ab', tokens, [], [expr])
+
+        # The failure names the grammar, the compiled rule, and the cause.
+        error = raised.value
+        assert error.error_code == ACTION_EXECUTION_FAILED_ID
+        assert error.message == 'action failed'
+        assert error.kwargs['grammar_id'] == 'expr'
+        assert error.kwargs['rule_name'] == 'WORD'
+        assert type(error.__cause__) is ValueError
+        assert str(error.__cause__) == 'action failed'
+
+    # * test: lex_error_passes_through
+    def test_lex_error_passes_through(self, test_ctx, session):
+        '''
+        Let a lexical error pass through the action-failure wrap.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The word matches. The following character does not.
+        expr = _grammar('expr')
+        tokens = [
+            SimpleTokenRuleAggregate(
+                name='WORD',
+                grammar_id='expr',
+                pattern='[A-Z]+',
+            ),
+        ]
+        with pytest.raises(ServiceError) as raised:
+            PlyLexer().tokenize('expr', 'AB@', tokens, [], [expr])
+
+        # The span stays a lexical error. It is not recast as an action failure.
+        error = raised.value
+        assert error.error_code == LEX_ERROR_ID
+        assert (error.error_code == ACTION_EXECUTION_FAILED_ID) is False
+        assert error.kwargs['grammar_id'] == 'expr'
+        assert error.kwargs['lineno'] == 1
+        assert error.kwargs['lexpos'] == 2
+        assert error.kwargs['value'] == '@'
+        assert 'rule_name' not in error.kwargs

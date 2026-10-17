@@ -6,6 +6,8 @@
 import types
 
 # ** app
+from tiferet.interfaces.core import ServiceError
+from tiferet_ly.assets.reader import ACTION_EXECUTION_FAILED_ID
 from tiferet_ly.interfaces.lexer import LexerService
 from tiferet_ly.mappers.lexeme import LexemeAggregate
 from tiferet_ly.utils import core as reader_core
@@ -19,7 +21,7 @@ class PlyLexer(PlyReader, LexerService):
     Read declared text as lexeme aggregates, not as reader tokens.
 
     Each call builds a fresh lexer from the selected token set. Optional
-    rewrites are accepted and ignored until a later child supplies a use.
+    rewrites are passed into token translation.
     '''
 
     # * method: tokenize
@@ -39,6 +41,9 @@ class PlyLexer(PlyReader, LexerService):
         tokens, and builds with ``optimize=0``. Each PLY token is mapped
         through ``LexemeAggregate.new``. An unmatched character raises
         ``LEX_ERROR_ID``. A build failure raises ``READER_BUILD_FAILED_ID``.
+        A non-``ServiceError`` exception from ``lexer.token()`` raises
+        ``ACTION_EXECUTION_FAILED_ID``. ``ServiceError`` values, including
+        ``LEX_ERROR_ID``, pass through unchanged.
 
         :param grammar_id: The grammar that owns the read.
         :type grammar_id: str
@@ -50,32 +55,67 @@ class PlyLexer(PlyReader, LexerService):
         :type productions: list
         :param grammars: The declared grammars.
         :type grammars: list
-        :param rewrites: Optional rewrites. Defaults to None. Ignored.
+        :param rewrites: Optional rewrites passed into token translation. Defaults to None.
         :type rewrites: dict | None
         :return: The lexeme aggregates.
         :rtype: list[LexemeAggregate]
         '''
 
-        # Productions and rewrites are accepted. Neither selects tokens.
-        _ = (productions, rewrites)
+        # Productions are accepted and unused. They do not select tokens.
+        _ = productions
 
-        # Build a fresh lexer. Span errors and build failures stay in the reader.
-        lexer = PlyLexer._build_lexer(grammar_id, grammars, tokens)
+        # Build a fresh lexer. Pass caller rewrites into token translation.
+        lexer = PlyLexer._build_lexer(
+            grammar_id,
+            grammars,
+            tokens,
+            rewrites=rewrites,
+        )
 
         # Feed this call's text. Do not reuse a previous input.
         lexer.input(text)
 
-        # Map each recognized word. An unmatched character raises here.
+        # Map each recognized word. Wrap only the token loop.
         lexemes = []
-        token = lexer.token()
-        while token is not None:
-            lexemes.append(LexemeAggregate.new(
-                token.type,
-                token.value,
-                token.lineno,
-                token.lexpos,
-            ))
+        try:
             token = lexer.token()
+            while token is not None:
+                lexemes.append(LexemeAggregate.new(
+                    token.type,
+                    token.value,
+                    token.lineno,
+                    token.lexpos,
+                ))
+                token = lexer.token()
+        except ServiceError:
+            # Existing reader errors, including lexical failures, pass through.
+            raise
+        except Exception as error:
+            # Prefer the innermost compiled rule named in the traceback.
+            frames = []
+            tb = error.__traceback__
+            while tb is not None:
+                frames.append(tb)
+                tb = tb.tb_next
+            rule_name = None
+            for frame in reversed(frames):
+                filename = frame.tb_frame.f_code.co_filename
+                if filename.startswith('<rule:') and filename.endswith('>'):
+                    rule_name = filename[len('<rule:'):-1]
+                    break
+
+            # Raise the action failure. Omit rule_name when no frame matches.
+            attribution = {}
+            if rule_name is not None:
+                attribution['rule_name'] = rule_name
+            ServiceError.raise_for(
+                self,
+                ACTION_EXECUTION_FAILED_ID,
+                message=str(error),
+                cause=error,
+                grammar_id=grammar_id,
+                **attribution,
+            )
 
         # Return aggregates, not PLY tokens.
         return lexemes
@@ -86,6 +126,7 @@ class PlyLexer(PlyReader, LexerService):
             grammar_id: str,
             grammars: list,
             tokens: list,
+            rewrites: dict | None = None,
         ):
         '''
         Build one lexer through the shared reader.
@@ -100,6 +141,8 @@ class PlyLexer(PlyReader, LexerService):
         :type grammars: list
         :param tokens: The declared token catalogue, in input order.
         :type tokens: list
+        :param rewrites: Optional rewrites forwarded to lexer construction. Defaults to None.
+        :type rewrites: dict | None
         :return: A new PLY lexer.
         :rtype: ply.lex.Lexer
         '''
@@ -117,7 +160,12 @@ class PlyLexer(PlyReader, LexerService):
         # Swap only for this build. The shared reader still calls lex.lex.
         reader_core.lex.lex = bound_lex
         try:
-            return PlyReader.build_lexer(grammar_id, grammars, tokens)
+            return PlyReader.build_lexer(
+                grammar_id,
+                grammars,
+                tokens,
+                rewrites=rewrites,
+            )
         finally:
             reader_core.lex.lex = real_lex
 
