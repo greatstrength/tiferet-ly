@@ -16,6 +16,7 @@ import pytest
 from tiferet import use_tester
 from tiferet.interfaces.core import ServiceError
 from tiferet_ly.assets.reader import (
+    ACTION_EXECUTION_FAILED_ID,
     PARSE_ERROR_ID,
     READER_BUILD_FAILED_ID,
 )
@@ -437,3 +438,139 @@ class TestPlyParser:
             PlyParser().parse('expr', '1', [], [], [_grammar()])
         assert raised.value.error_code == READER_BUILD_FAILED_ID
         assert parse_utils.reader_core.lex.lex is original
+
+    # * test: caller_rewrite_bindings_used_by_complex_production
+    def test_caller_rewrite_bindings_used_by_complex_production(self, test_ctx, session):
+        '''
+        Prove one caller table reaches a token action and a production action.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The three bindings stay distinct. The closure closes over a label.
+        class BoundClass:
+            pass
+
+        def bound_function(value):
+            return ('function', value)
+
+        label = 'closed'
+
+        def bound_closure(value):
+            return (label, value)
+
+        assert BoundClass.__name__ != bound_function.__name__
+        assert bound_function.__name__ != bound_closure.__name__
+        assert BoundClass.__name__ != bound_closure.__name__
+
+        # The token action uses $fn. The production action uses $cls and $clos.
+        token = ComplexTokenRuleAggregate(
+            name='NUMBER',
+            grammar_id='expr',
+            pattern=r'[0-9]+',
+            action='t.value = $fn(int(t.value))\nreturn t',
+        )
+        production = ComplexProductionRuleAggregate(
+            name='expr',
+            grammar_id='expr',
+            spec='expr : NUMBER',
+            action='p[0] = ($cls, p[1], $clos(p[1][1]))',
+        )
+        rewrites = {
+            '$cls': BoundClass,
+            '$fn': bound_function,
+            '$clos': bound_closure,
+        }
+        result = PlyParser().parse(
+            'expr',
+            '7',
+            [token],
+            [production],
+            [_grammar()],
+            rewrites=rewrites,
+        )
+
+        # The class, function, and closure all came from the caller table.
+        assert result[0] is BoundClass
+        assert result[1] == ('function', 7)
+        assert result[2] == ('closed', 7)
+
+    # * test: production_action_exception_is_structured_and_attributed
+    def test_production_action_exception_is_structured_and_attributed(self, test_ctx, session):
+        '''
+        Wrap a production action exception as an attributed action failure.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The production raises before it can assign a value.
+        tokens = [
+            SimpleTokenRuleAggregate(
+                name='NUMBER',
+                grammar_id='expr',
+                pattern=r'[0-9]+',
+            ),
+        ]
+        production = ComplexProductionRuleAggregate(
+            name='expr',
+            grammar_id='expr',
+            spec='expr : NUMBER',
+            action="raise ValueError('boom')",
+        )
+        with pytest.raises(ServiceError) as raised:
+            PlyParser().parse(
+                'expr',
+                '1',
+                tokens,
+                [production],
+                [_grammar()],
+            )
+
+        # The failure names the grammar, the compiled rule, and the cause.
+        assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
+        assert raised.value.message == 'boom'
+        assert raised.value.kwargs['grammar_id'] == 'expr'
+        assert raised.value.kwargs['rule_name'] == 'expr'
+        assert 'rule_name' in raised.value.kwargs
+        assert isinstance(raised.value.__cause__, ValueError)
+        assert raised.value.__cause__.args == ('boom',)
+
+    # * test: syntax_error_remains_parse_error
+    def test_syntax_error_remains_parse_error(self, test_ctx, session):
+        '''
+        Keep a syntax error as ``PARSE_ERROR_ID`` when rewrites are supplied.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The marker is unused. A leading operator is still a syntax error.
+        class BoundMarker:
+            pass
+
+        with pytest.raises(ServiceError) as raised:
+            PlyParser().parse(
+                'expr',
+                '+',
+                _tokens(),
+                _productions(),
+                [_grammar()],
+                rewrites={'$marker': BoundMarker},
+            )
+
+        # The span stays a parse error. It is not recast as an action failure.
+        assert raised.value.error_code == PARSE_ERROR_ID
+        assert raised.value.error_code != ACTION_EXECUTION_FAILED_ID
+        assert raised.value.kwargs['grammar_id'] == 'expr'
+        assert raised.value.kwargs['type'] == 'PLUS'
+        assert raised.value.kwargs['value'] == '+'
+        assert raised.value.kwargs['lineno'] == 1
+        assert raised.value.kwargs['lexpos'] == 0
