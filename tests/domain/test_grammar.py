@@ -2,9 +2,14 @@
 
 # *** imports
 
-# ** app
+# ** core
+from typing import Optional
+
+# ** infra
 from tiferet import use_tester
 from tiferet.domain.core import DomainObject
+
+# ** app
 from tiferet_ly.domain import grammar as grammar_module
 from tiferet_ly.domain.grammar import Grammar
 
@@ -29,7 +34,7 @@ class TestGrammar:
     # * test: new
     def test_new(self, test_ctx, session):
         '''
-        Construct a grammar from its three declared fields.
+        Construct a grammar from its declared fields.
 
         :param test_ctx: The bound domain tester context.
         :type test_ctx: DomainTesterContext
@@ -37,9 +42,24 @@ class TestGrammar:
         :type session: TestSessionContext
         '''
 
-        # Assert the model is a domain object with exactly those fields.
+        # Assert the model is a domain object with exactly those fields, in order.
         assert issubclass(Grammar, DomainObject)
-        assert set(Grammar.model_fields) == {'id', 'parent_ids', 'start'}
+        assert list(Grammar.model_fields) == ['id', 'parent_ids', 'start', 'ignore']
+        assert set(Grammar.model_fields) == {'id', 'parent_ids', 'start', 'ignore'}
+        assert 'layout' not in Grammar.model_fields
+
+        # Assert ignore is an optional string that defaults to None.
+        ignore = Grammar.model_fields['ignore']
+        assert ignore.annotation == Optional[str]
+        assert ignore.default is None
+        assert ignore.is_required() is False
+        assert ignore.description == (
+            'A bare regular-expression character class PLY skips before attempting any '
+            'token rule, installed as the literal t_ignore module attribute PLY\'s own '
+            'convention expects. Grammar-own, like start: not composed across parent_ids.'
+        )
+
+        # Assert construction from the unchanged sample data.
         test_ctx.assert_new()
 
     # * test: empty_parent_ids
@@ -150,3 +170,82 @@ class TestGrammar:
         # The retired container types are not part of the module.
         assert not hasattr(grammar_module, 'Subgrammar')
         assert not hasattr(grammar_module, 'GrammarDeclaration')
+
+    # * test: ignore_defaults_to_none
+    def test_ignore_defaults_to_none(self, test_ctx, session):
+        '''
+        Store no ignore pattern when ignore is omitted or None.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Omitting ignore stores None.
+        grammar = Grammar(
+            id='expr',
+            parent_ids=[],
+            start='expr',
+        )
+        assert grammar.ignore is None
+
+        # Passing ignore=None stores None.
+        grammar = Grammar(
+            id='expr',
+            parent_ids=[],
+            start='expr',
+            ignore=None,
+        )
+        assert grammar.ignore is None
+
+    # * test: ignore_stores_declared_string
+    def test_ignore_stores_declared_string(self, test_ctx, session):
+        '''
+        Store a declared ignore string unchanged, without compiling it.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Each declared string, including an invalid character class, is stored as given.
+        for value in (' \t', '', '['):
+            grammar = Grammar(
+                id='expr',
+                parent_ids=[],
+                start='expr',
+                ignore=value,
+            )
+            assert grammar.ignore == value
+            assert type(grammar.ignore) is str
+
+    # * test: ignore_is_not_composed_across_parent_ids
+    def test_ignore_is_not_composed_across_parent_ids(self, test_ctx, session):
+        '''
+        Keep ignore grammar-own: a child does not receive a parent's pattern.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A parent grammar declares its own ignore pattern.
+        parent = Grammar(
+            id='expr',
+            parent_ids=[],
+            start='expr',
+            ignore=' \t',
+        )
+        assert parent.ignore == ' \t'
+
+        # A child that lists that parent does not inherit the pattern.
+        child = Grammar(
+            id='arith',
+            parent_ids=['expr', 'factor'],
+            start='expr',
+        )
+        assert child.parent_ids == ['expr', 'factor']
+        assert child.ignore is None
