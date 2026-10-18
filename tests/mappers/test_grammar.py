@@ -9,13 +9,13 @@ from pathlib import Path
 # ** infra
 import pytest
 from pydantic import ValidationError
-
-# ** app
 from tiferet import (
     Aggregate,
     TransferObject,
     use_tester,
 )
+
+# ** app
 from tiferet_ly.domain import Grammar
 from tiferet_ly.mappers import grammar as grammar_mappers
 from tiferet_ly.mappers.grammar import (
@@ -146,7 +146,7 @@ class TestGrammarAggregate:
 
         # Bases and model fields match the published boundary.
         assert GrammarAggregate.__bases__ == (Grammar, Aggregate)
-        assert set(GrammarAggregate.model_fields) == {'id', 'parent_ids', 'start'}
+        assert set(GrammarAggregate.model_fields) == {'id', 'parent_ids', 'start', 'ignore'}
         test_ctx.assert_new()
 
     # * test: retired_shape_absent
@@ -252,7 +252,7 @@ class TestGrammarConfigObject:
 
         # Bases, roles, and model fields match the published boundary.
         assert GrammarConfigObject.__bases__ == (Grammar, TransferObject)
-        assert set(GrammarConfigObject.model_fields) == {'id', 'parent_ids', 'start'}
+        assert set(GrammarConfigObject.model_fields) == {'id', 'parent_ids', 'start', 'ignore'}
         assert GrammarConfigObject._ROLES == {
             'to_model': {},
             'to_data': {'by_alias': True, 'exclude': {'id'}},

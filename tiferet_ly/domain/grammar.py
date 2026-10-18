@@ -3,12 +3,10 @@
 # *** imports
 
 # ** core
-from typing import List
+from typing import List, Optional
 
 # ** infra
 from pydantic import Field
-
-# ** app
 from tiferet.domain.core import DomainObject
 
 # *** models
@@ -18,9 +16,10 @@ class Grammar(DomainObject):
     '''
     The identity and composition of one declared grammar.
 
-    A grammar names itself, the grammars it composes, and the production
-    it starts from. It does not own a rule catalogue or check those facts
-    against any other aggregate.
+    A grammar names itself, the grammars it composes, the production it
+    starts from, and an optional ignore pattern of its own. It does not
+    own a rule catalogue or check those facts against any other aggregate.
+    The ignore pattern is not composed across parent_ids.
     '''
 
     # * attribute: id
@@ -39,4 +38,14 @@ class Grammar(DomainObject):
     start: str = Field(
         ...,
         description='The declared start-production name.',
+    )
+
+    # * attribute: ignore
+    ignore: Optional[str] = Field(
+        default=None,
+        description=(
+            'A bare regular-expression character class PLY skips before attempting any '
+            'token rule, installed as the literal t_ignore module attribute PLY\'s own '
+            'convention expects. Grammar-own, like start: not composed across parent_ids.'
+        ),
     )
