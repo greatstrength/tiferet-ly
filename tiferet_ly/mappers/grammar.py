@@ -5,11 +5,13 @@
 # ** core
 from typing import Any, ClassVar, Dict
 
-# ** app
+# ** infra
 from tiferet import (
     Aggregate,
     TransferObject,
 )
+
+# ** app
 from tiferet_ly.domain import Grammar
 
 # *** mappers
@@ -17,10 +19,13 @@ from tiferet_ly.domain import Grammar
 # ** mapper: grammar_aggregate
 class GrammarAggregate(Grammar, Aggregate):
     '''
-    A mutable grammar that stores identity, ordered parents, and a start name.
+    A mutable grammar that stores identity, ordered parents, a start name,
+    and an optional ignore string.
 
     Changing those fields does not check that parents exist, that the graph
-    is acyclic, or that the start name is a production.
+    is acyclic, that the start name is a production, or that ignore is a
+    valid expression. Ignore is this grammar's own value. It is not taken
+    from parent_ids. Layout is not stored.
     '''
 
     # * method: set_start
@@ -56,8 +61,10 @@ class GrammarConfigObject(Grammar, TransferObject):
     '''
     Configuration data for one declared grammar.
 
-    Mapping keeps parent order and drops only the grammar id. It does not
-    resolve parents or the start production.
+    Mapping keeps parent order and a declared ignore string, and drops only
+    the grammar id. A missing or null ignore stays None and is omitted when
+    serialized. Mapping does not resolve parents, the start production, or
+    ignore, and it does not map layout.
     '''
 
     # * attribute: _ROLES
@@ -74,6 +81,9 @@ class GrammarConfigObject(Grammar, TransferObject):
         '''
         Map this configuration to a grammar aggregate.
 
+        A declared ignore string is passed through; a missing ignore is left
+        to the aggregate default None.
+
         :param overrides: Field replacements and extra construction values.
         :type overrides: dict
         :return: The mapped grammar aggregate.
@@ -88,6 +98,9 @@ class GrammarConfigObject(Grammar, TransferObject):
     def from_model(cls, model: Grammar, **overrides) -> 'GrammarConfigObject':
         '''
         Create grammar configuration data from a grammar or aggregate.
+
+        Ignore is copied as stored on the model and is not composed from
+        parent_ids.
 
         :param model: A grammar domain object or grammar aggregate.
         :type model: Grammar

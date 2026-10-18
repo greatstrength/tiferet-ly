@@ -217,6 +217,26 @@ class TestGrammarAggregate:
         grammar.set_start('missing')
         assert grammar.start == 'missing'
 
+    # * test: ignore_defaults_to_none
+    def test_ignore_defaults_to_none(self, test_ctx, session):
+        '''
+        Leave ignore None when the grammar omits it.
+
+        :param test_ctx: The bound aggregate tester context.
+        :type test_ctx: AggregateTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Construction without ignore does not raise and stores None.
+        grammar = GrammarAggregate(
+            id='expr',
+            parent_ids=[],
+            start='expr',
+        )
+        assert grammar.ignore is None
+        assert 'layout' not in GrammarAggregate.model_fields
+
 # ** tester: test_grammar_config_object
 @use_tester(
     type='transfer_object',
@@ -272,7 +292,7 @@ class TestGrammarConfigObject:
         :type session: TestSessionContext
         '''
 
-        # Declared parent order is the serialized order.
+        # Declared parent order is the serialized order. No ignore key is written.
         primitive = GrammarConfigObject.from_model(GrammarAggregate(
             id='expr',
             parent_ids=['term', 'factor'],
@@ -282,6 +302,23 @@ class TestGrammarConfigObject:
             'parent_ids': ['term', 'factor'],
             'start': 'expr',
         }
+        assert 'id' not in primitive
+        assert 'layout' not in primitive
+
+        # A declared ignore string is written after start, unchanged.
+        declared = GrammarConfigObject.from_model(GrammarAggregate(
+            id='expr',
+            parent_ids=['term', 'factor'],
+            start='expr',
+            ignore=' \t',
+        )).to_primitive('to_data')
+        assert declared == {
+            'parent_ids': ['term', 'factor'],
+            'start': 'expr',
+            'ignore': ' \t',
+        }
+        assert 'id' not in declared
+        assert 'layout' not in declared
 
     # * test: to_data_keeps_empty_parents
     def test_to_data_keeps_empty_parents(self, test_ctx, session):
@@ -294,7 +331,7 @@ class TestGrammarConfigObject:
         :type session: TestSessionContext
         '''
 
-        # An empty list is not None, so the role keeps it.
+        # An empty list is not None, so the role keeps it. No ignore key is written.
         primitive = GrammarConfigObject.from_model(GrammarAggregate(
             id='expr',
             parent_ids=[],
@@ -304,6 +341,23 @@ class TestGrammarConfigObject:
             'parent_ids': [],
             'start': 'expr',
         }
+        assert 'id' not in primitive
+        assert 'layout' not in primitive
+
+        # A declared ignore string is written alongside the empty parent list.
+        declared = GrammarConfigObject.from_model(GrammarAggregate(
+            id='expr',
+            parent_ids=[],
+            start='expr',
+            ignore=' \t',
+        )).to_primitive('to_data')
+        assert declared == {
+            'parent_ids': [],
+            'start': 'expr',
+            'ignore': ' \t',
+        }
+        assert 'id' not in declared
+        assert 'layout' not in declared
 
     # * test: map_round_trip
     def test_map_round_trip(self, test_ctx, session):
@@ -397,8 +451,123 @@ class TestGrammarConfigObject:
             'start': 'expr',
             'unused': True,
         })
-        assert config.to_primitive('to_data') == {
+        primitive = config.to_primitive('to_data')
+        assert primitive == {
             'parent_ids': [],
             'start': 'expr',
         }
-        assert 'unused' not in config.map().model_dump()
+        assert 'ignore' not in primitive
+        assert 'layout' not in primitive
+
+        # The mapped dump keeps a null ignore; to_data omits it.
+        mapped = config.map()
+        assert 'unused' not in mapped.model_dump()
+        assert mapped.ignore is None
+        assert mapped.model_dump()['ignore'] is None
+
+    # * test: to_data_preserves_ignore
+    def test_to_data_preserves_ignore(self, test_ctx, session):
+        '''
+        Serialize a declared ignore string exactly and keep the id out.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The space-then-tab string is not stripped, escaped, or compiled.
+        primitive = GrammarConfigObject.from_model(GrammarAggregate(
+            id='expr',
+            parent_ids=['term', 'factor'],
+            start='expr',
+            ignore=' \t',
+        )).to_primitive('to_data')
+        assert primitive == {
+            'parent_ids': ['term', 'factor'],
+            'start': 'expr',
+            'ignore': ' \t',
+        }
+        assert 'id' not in primitive
+        assert 'layout' not in primitive
+
+    # * test: map_preserves_ignore
+    def test_map_preserves_ignore(self, test_ctx, session):
+        '''
+        Map a declared ignore string to the aggregate unchanged.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Validation then mapping keeps the same two-character string.
+        mapped = GrammarConfigObject.model_validate({
+            'id': 'expr',
+            'parent_ids': ['term'],
+            'start': 'expr',
+            'ignore': ' \t',
+        }).map()
+        assert isinstance(mapped, GrammarAggregate)
+        assert mapped.id == 'expr'
+        assert mapped.parent_ids == ['term']
+        assert mapped.start == 'expr'
+        assert mapped.ignore == ' \t'
+        assert 'layout' not in mapped.model_dump()
+
+    # * test: map_without_ignore_stays_valid
+    def test_map_without_ignore_stays_valid(self, test_ctx, session):
+        '''
+        Map a grammar with no ignore key, and take no ignore from parents.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The published grammar body plus its injected id maps without ignore.
+        mapped = GrammarConfigObject.model_validate({
+            'id': 'arith',
+            'parent_ids': [],
+            'start': 'expr',
+        }).map()
+        assert isinstance(mapped, GrammarAggregate)
+        assert mapped.ignore is None
+        assert mapped.parent_ids == []
+        assert mapped.start == 'expr'
+
+        # A child grammar does not receive ignore through parent_ids.
+        child = GrammarConfigObject(
+            id='child',
+            parent_ids=['arith'],
+            start='expr',
+        ).map()
+        assert child.ignore is None
+        assert child.parent_ids == ['arith']
+
+    # * test: layout_key_is_dropped
+    def test_layout_key_is_dropped(self, test_ctx, session):
+        '''
+        Drop a layout configuration key as unused input.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Layout is not a field, so it is neither serialized nor mapped.
+        config = GrammarConfigObject.model_validate({
+            'id': 'expr',
+            'parent_ids': [],
+            'start': 'expr',
+            'layout': {'indent_token': 'INDENT', 'dedent_token': 'DEDENT'},
+        })
+        assert 'layout' not in GrammarConfigObject.model_fields
+        assert not hasattr(config, 'layout')
+        assert 'layout' not in config.to_primitive('to_data')
+        mapped = config.map()
+        assert 'layout' not in mapped.model_dump()
+        assert mapped.ignore is None
