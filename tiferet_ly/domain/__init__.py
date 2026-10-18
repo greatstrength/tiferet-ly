@@ -7,6 +7,7 @@ from .token import (
     TokenRule,
     SimpleTokenRule,
     ComplexTokenRule,
+    SyntheticTokenRule,
 )
 from .production import (
     ProductionRule,
@@ -22,6 +23,7 @@ __all__ = [
     'TokenRule',
     'SimpleTokenRule',
     'ComplexTokenRule',
+    'SyntheticTokenRule',
     'ProductionRule',
     'SimpleProductionRule',
     'ComplexProductionRule',

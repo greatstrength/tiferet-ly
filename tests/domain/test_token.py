@@ -5,14 +5,15 @@
 # ** infra
 import pytest
 from pydantic import ValidationError
-
-# ** app
 from tiferet import use_tester
 from tiferet.domain.core import DomainObject
+
+# ** app
 from tiferet_ly.domain.token import (
     ComplexTokenRule,
     SimpleTokenRule,
     TokenRule,
+    SyntheticTokenRule,
 )
 
 # *** testers
@@ -206,3 +207,109 @@ class TestComplexTokenRule:
         # Each rule keeps the grammar it was declared under.
         assert arith.grammar_id == 'arith'
         assert expr.grammar_id == 'expr'
+
+    # * test: action_without_pattern_invalid
+    def test_action_without_pattern_invalid(self, test_ctx, session):
+        '''
+        Reject a complex token rule that declares an action without a pattern.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Construction with an action but no pattern fails validation.
+        with pytest.raises(ValidationError):
+            ComplexTokenRule(
+                name='NUMBER',
+                grammar_id='arith',
+                action='t.value = int(t.value)',
+            )
+
+# ** tester: test_synthetic_token_rule
+@use_tester(
+    type='domain',
+    target_cls=SyntheticTokenRule,
+    sample_data={
+        'name': 'INDENT',
+        'grammar_id': 'arith',
+    },
+    equality_fields=['name', 'grammar_id'],
+)
+class TestSyntheticTokenRule:
+    '''
+    Tests for a token rule that declares a name only.
+    '''
+
+    # * test: new
+    def test_new(self, test_ctx, session):
+        '''
+        Construct a synthetic token rule from a name and grammar membership.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Assert the variant is a token rule that declares only a name and grammar.
+        assert issubclass(SyntheticTokenRule, DomainObject)
+        assert issubclass(SyntheticTokenRule, TokenRule)
+        assert set(SyntheticTokenRule.model_fields) == {'name', 'grammar_id'}
+        assert 'pattern' not in SyntheticTokenRule.model_fields
+        assert 'action' not in SyntheticTokenRule.model_fields
+        test_ctx.assert_new()
+
+    # * test: grammar_id_required
+    def test_grammar_id_required(self, test_ctx, session):
+        '''
+        Reject a synthetic token rule constructed without grammar membership.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Construction without grammar_id fails validation.
+        with pytest.raises(ValidationError):
+            SyntheticTokenRule(name='INDENT')
+
+    # * test: pattern_forbidden
+    def test_pattern_forbidden(self, test_ctx, session):
+        '''
+        Reject a synthetic token rule that declares a pattern.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A pattern is an unknown field on a synthetic rule.
+        with pytest.raises(ValidationError):
+            SyntheticTokenRule(
+                name='INDENT',
+                grammar_id='arith',
+                pattern=r'\s+',
+            )
+
+    # * test: action_forbidden
+    def test_action_forbidden(self, test_ctx, session):
+        '''
+        Reject a synthetic token rule that declares action source.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # An action is an unknown field on a synthetic rule.
+        with pytest.raises(ValidationError):
+            SyntheticTokenRule(
+                name='INDENT',
+                grammar_id='arith',
+                action='return t',
+            )

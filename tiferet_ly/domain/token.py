@@ -4,8 +4,6 @@
 
 # ** infra
 from pydantic import Field
-
-# ** app
 from tiferet.domain.core import DomainObject
 
 # *** models
@@ -66,3 +64,14 @@ class ComplexTokenRule(TokenRule):
         ...,
         description='The declared action source for the token.',
     )
+
+# ** model: synthetic_token_rule
+class SyntheticTokenRule(TokenRule):
+    '''
+    A token rule whose declaration is a name and nothing else.
+
+    Synthetic rules carry no pattern and no action source. They name a
+    token; they do not match text.
+    '''
+
+    pass

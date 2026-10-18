@@ -46,11 +46,12 @@ def test_domain_exports():
     Export the declared-language domain classes and the optional node.
     '''
 
-    # The package surface is the six rule classes, Grammar, and AstNode.
+    # The package surface is the seven rule classes, Grammar, and AstNode.
     assert domain.__all__ == [
         'TokenRule',
         'SimpleTokenRule',
         'ComplexTokenRule',
+        'SyntheticTokenRule',
         'ProductionRule',
         'SimpleProductionRule',
         'ComplexProductionRule',
