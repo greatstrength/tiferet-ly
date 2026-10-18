@@ -9,13 +9,13 @@ from pathlib import Path
 # ** infra
 import pytest
 from pydantic import ValidationError
-
-# ** app
 from tiferet import (
     Aggregate,
     TransferObject,
     use_tester,
 )
+
+# ** app
 from tiferet_ly.domain import Grammar
 from tiferet_ly.mappers import grammar as grammar_mappers
 from tiferet_ly.mappers.grammar import (
