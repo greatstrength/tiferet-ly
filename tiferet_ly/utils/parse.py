@@ -12,6 +12,7 @@ import ply.yacc as yacc
 # ** app
 from tiferet.interfaces.core import ServiceError
 from tiferet_ly.assets.reader import (
+    ACTION_EXECUTION_FAILED_ID,
     PARSE_ERROR_ID,
     READER_BUILD_FAILED_ID,
 )
@@ -46,7 +47,10 @@ class PlyParser(PlyReader, ParserService):
 
     # * method: install_productions (static)
     @staticmethod
-    def install_productions(productions: list) -> _ParserModule:
+    def install_productions(
+            productions: list,
+            rewrites: dict | None = None,
+        ) -> _ParserModule:
         '''
         Install translated productions under unique attributes.
 
@@ -57,6 +61,8 @@ class PlyParser(PlyReader, ParserService):
 
         :param productions: Selected productions, in selected order.
         :type productions: list
+        :param rewrites: Optional rewrites forwarded to production translation. Defaults to None.
+        :type rewrites: dict | None
         :return: A fresh module whose production attributes are unique.
         :rtype: _ParserModule
         '''
@@ -65,11 +71,14 @@ class PlyParser(PlyReader, ParserService):
         module = _ParserModule()
         module.__module__ = __name__
 
-        # Assign each translation. Do not change the production name.
+        # Assign each translation. Forward rewrites. Do not change the name.
         used = set()
         counts = {}
         for rule in productions:
-            base, function = RuleTranslator.translate_production_rule(rule)
+            base, function = RuleTranslator.translate_production_rule(
+                rule,
+                rewrites=rewrites,
+            )
             counts[rule.name] = counts.get(rule.name, 0) + 1
             attribute = base if counts[rule.name] == 1 else f'{base}_{counts[rule.name]}'
             while attribute in used:
@@ -151,20 +160,22 @@ class PlyParser(PlyReader, ParserService):
         :type productions: list
         :param grammars: The declared grammars.
         :type grammars: list
-        :param rewrites: Optional rewrites. Defaults to None. Ignored.
+        :param rewrites: Optional rewrites forwarded to the lexer build and to production translation. Defaults to None.
         :type rewrites: dict | None
         :return: The start action's ``p[0]``.
         :rtype: Any
         '''
 
-        # Rewrites are accepted. They do not select productions.
-        _ = rewrites
-
         # Resolve before PLY so a missing grammar never builds a parser.
         grammar = PlyReader.resolve_grammar(grammar_id, grammars)
 
-        # Build a new lexer for this call. Do not reuse a lexer table.
-        lexer = PlyParser._build_lexer(grammar_id, grammars, tokens)
+        # Build a new lexer for this call. Forward rewrites. Do not select by them.
+        lexer = PlyParser._build_lexer(
+            grammar_id,
+            grammars,
+            tokens,
+            rewrites=rewrites,
+        )
 
         # Select in ancestry order. Repeated names stay as alternatives.
         selected = GrammarRuleSelector.select_productions(
@@ -173,11 +184,19 @@ class PlyParser(PlyReader, ParserService):
             productions,
         )
 
-        # Install translations under unique attributes. Do not rename them.
-        module = PlyParser.install_productions(selected)
+        # Install translations under unique attributes. Forward the same table.
+        module = PlyParser.install_productions(
+            selected,
+            rewrites=rewrites,
+        )
 
-        # The parser token list is the selected token order.
-        installed_tokens = PlyReader.install_tokens(grammar, grammars, tokens)
+        # The parser token list is the selected token order. Forward rewrites.
+        installed_tokens = PlyReader.install_tokens(
+            grammar,
+            grammars,
+            tokens,
+            rewrites=rewrites,
+        )
         module.tokens = list(installed_tokens.tokens)
 
         # Point syntax errors at the span-bearing helper.
@@ -204,12 +223,37 @@ class PlyParser(PlyReader, ParserService):
                 grammar_id=grammar_id,
             )
 
-        # Return the start action's p[0].
-        return parser.parse(
-            text,
-            lexer=lexer,
-            debug=False,
-        )
+        # Return the start action's p[0]. Wrap only this call.
+        try:
+            return parser.parse(
+                text,
+                lexer=lexer,
+                debug=False,
+            )
+        except ServiceError:
+            # Syntax and build errors raised during the parse pass through.
+            raise
+        except Exception as error:
+            # Name the grammar. Add the rule only when a frame matches.
+            details = {
+                'grammar_id': grammar_id,
+            }
+            tb = error.__traceback__
+            while tb is not None:
+                filename = tb.tb_frame.f_code.co_filename
+                if filename.startswith('<rule:') and filename.endswith('>'):
+                    details['rule_name'] = filename[len('<rule:'):-1]
+                    break
+                tb = tb.tb_next
+
+            # Raise the action failure. Never pass rule_name as None.
+            ServiceError.raise_for(
+                PlyParser,
+                ACTION_EXECUTION_FAILED_ID,
+                message=str(error),
+                cause=error,
+                **details,
+            )
 
     # * method: _build_lexer (static)
     @staticmethod
@@ -217,6 +261,7 @@ class PlyParser(PlyReader, ParserService):
             grammar_id: str,
             grammars: list,
             tokens: list,
+            rewrites: dict | None = None,
         ):
         '''
         Build one lexer through the shared reader.
@@ -231,6 +276,8 @@ class PlyParser(PlyReader, ParserService):
         :type grammars: list
         :param tokens: The declared token catalogue, in input order.
         :type tokens: list
+        :param rewrites: Optional rewrites forwarded to lexer construction. Defaults to None.
+        :type rewrites: dict | None
         :return: A new PLY lexer.
         :rtype: ply.lex.Lexer
         '''
@@ -245,10 +292,15 @@ class PlyParser(PlyReader, ParserService):
                 PlyParser._bind_compiled_actions(reader)
             return real_lex(*args, **kwargs)
 
-        # Swap only for this build. The shared reader still calls lex.lex.
+        # Swap only for this build. Forward rewrites unchanged, including None.
         reader_core.lex.lex = bound_lex
         try:
-            return PlyReader.build_lexer(grammar_id, grammars, tokens)
+            return PlyReader.build_lexer(
+                grammar_id,
+                grammars,
+                tokens,
+                rewrites=rewrites,
+            )
         finally:
             reader_core.lex.lex = real_lex
 
