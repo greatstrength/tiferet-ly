@@ -317,6 +317,7 @@ class TestGrammarConfigObject:
             'start': 'expr',
             'ignore': ' \t',
         }
+        assert list(declared) == ['parent_ids', 'start', 'ignore']
         assert 'id' not in declared
         assert 'layout' not in declared
 
