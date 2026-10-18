@@ -239,10 +239,11 @@ class TokenRuleConfigObject(TransferObject):
 
         # Copy identity. Copy pattern only for a simple or complex rule,
         # and action only for a complex rule.
+        has_pattern = isinstance(model, (SimpleTokenRule, ComplexTokenRule))
         data = {
             'name': model.name,
             'grammar_id': model.grammar_id,
-            'pattern': model.pattern if isinstance(model, (SimpleTokenRule, ComplexTokenRule)) else None,
+            'pattern': model.pattern if has_pattern else None,
             'action': model.action if isinstance(model, ComplexTokenRule) else None,
         }
 
