@@ -9,16 +9,17 @@ from pathlib import Path
 # ** infra
 import pytest
 from pydantic import ValidationError
-
-# ** app
 from tiferet import (
     Aggregate,
     TransferObject,
     use_tester,
 )
+
+# ** app
 from tiferet_ly.domain import (
     ComplexTokenRule,
     SimpleTokenRule,
+    SyntheticTokenRule,
     TokenRule,
 )
 from tiferet_ly.mappers import core as mapper_core
@@ -30,6 +31,7 @@ from tiferet_ly.mappers.core import (
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
     TokenRuleAggregate,
     TokenRuleConfigObject,
 )
@@ -300,6 +302,24 @@ def test_helpers_do_not_mutate_input():
     assert flat == [{'name': 'PLUS', 'grammar_id': 'arithmetic', 'pattern': 'plus'}]
     assert flat[0] is flat_entry
 
+# ** test: synthetic_keyed_entry_has_no_pattern_or_action
+def test_synthetic_keyed_entry_has_no_pattern_or_action():
+    '''
+    Wrap and expand a synthetic entry without inserting pattern or action.
+    '''
+
+    # Wrapping a name-only entry keeps only its grammar membership.
+    wrapped = wrap_keyed_entries([{'name': 'INDENT', 'grammar_id': 'arithmetic'}])
+    assert wrapped == [{'INDENT': {'grammar_id': 'arithmetic'}}]
+    body = wrapped[0]['INDENT']
+    assert 'pattern' not in body
+    assert 'action' not in body
+
+    # Expanding restores the flat entry with no discriminator.
+    assert expand_keyed_entries(wrapped) == [
+        {'name': 'INDENT', 'grammar_id': 'arithmetic'},
+    ]
+
 # *** testers
 
 # ** tester: test_token_rule_aggregate
@@ -464,6 +484,68 @@ class TestComplexTokenRuleAggregate:
         assert rule.pattern == 'PLUS'
         assert rule.set_action('return t') is None
         assert rule.action == 'return t'
+
+# ** tester: test_synthetic_token_rule_aggregate
+@use_tester(
+    type='aggregate',
+    target_cls=SyntheticTokenRuleAggregate,
+    sample_data={
+        'name': 'INDENT',
+        'grammar_id': 'arithmetic',
+    },
+    equality_fields=['name', 'grammar_id'],
+)
+class TestSyntheticTokenRuleAggregate:
+    '''
+    Tests for a mutable synthetic token rule.
+    '''
+
+    # * test: bases_and_fields
+    def test_bases_and_fields(self, test_ctx, session):
+        '''
+        Store name and grammar membership only, with no pattern or action mutator.
+
+        :param test_ctx: The bound aggregate tester context.
+        :type test_ctx: AggregateTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The synthetic variant extends the named-rule aggregate.
+        assert SyntheticTokenRuleAggregate.__bases__ == (
+            SyntheticTokenRule,
+            mapper_core.NamedRuleAggregate,
+        )
+        assert set(SyntheticTokenRuleAggregate.model_fields) == {
+            'name',
+            'grammar_id',
+        }
+        assert not hasattr(SyntheticTokenRuleAggregate, 'set_pattern')
+        assert not hasattr(SyntheticTokenRuleAggregate, 'set_action')
+        test_ctx.assert_new()
+
+    # * test: rename_and_reassign
+    def test_rename_and_reassign(self, test_ctx, session):
+        '''
+        Assign name and grammar id without resolving a grammar.
+
+        :param test_ctx: The bound aggregate tester context.
+        :type test_ctx: AggregateTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # An unknown grammar id is stored, not resolved.
+        rule = SyntheticTokenRuleAggregate(
+            name='INDENT',
+            grammar_id='arithmetic',
+        )
+        assert rule.rename('DEDENT') is None
+        assert rule.name == 'DEDENT'
+        assert rule.reassign_grammar('logic') is None
+        assert rule.grammar_id == 'logic'
+        assert 'pattern' not in type(rule).model_fields
+        assert 'action' not in type(rule).model_fields
 
 # ** tester: test_token_rule_config_object
 @use_tester(
@@ -712,3 +794,188 @@ class TestTokenRuleConfigObject:
             action='t.value = int(t.value)',
         ))
         assert complex_rule.action == 't.value = int(t.value)'
+
+    # * test: map_synthetic_when_neither_present
+    def test_map_synthetic_when_neither_present(self, test_ctx, session):
+        '''
+        Map configuration with neither pattern nor action to a synthetic aggregate.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Omitted pattern and action default to None and select Synthetic.
+        mapped = TokenRuleConfigObject(
+            name='INDENT',
+            grammar_id='arithmetic',
+        ).map()
+        assert isinstance(mapped, SyntheticTokenRuleAggregate)
+        assert mapped.name == 'INDENT'
+        assert mapped.grammar_id == 'arithmetic'
+        assert set(type(mapped).model_fields) == {'name', 'grammar_id'}
+
+        # Overrides that clear both fields are applied before the branch.
+        cleared = TokenRuleConfigObject(
+            name='NUMBER',
+            grammar_id='arithmetic',
+            pattern='digits',
+            action='t.value = int(t.value)',
+        ).map(pattern=None, action=None)
+        assert isinstance(cleared, SyntheticTokenRuleAggregate)
+        assert cleared.name == 'NUMBER'
+        assert cleared.grammar_id == 'arithmetic'
+
+        # Clearing the pattern of a simple configuration also selects Synthetic.
+        simple_cleared = TokenRuleConfigObject(
+            name='PLUS',
+            grammar_id='arithmetic',
+            pattern='plus',
+        ).map(pattern=None)
+        assert isinstance(simple_cleared, SyntheticTokenRuleAggregate)
+
+        # An unused override is passed through and rejected by the aggregate.
+        with pytest.raises(ValidationError) as mapped_error:
+            TokenRuleConfigObject(
+                name='INDENT',
+                grammar_id='arithmetic',
+            ).map(unused=True)
+        with pytest.raises(ValidationError) as constructed_error:
+            SyntheticTokenRuleAggregate(
+                name='INDENT',
+                grammar_id='arithmetic',
+                unused=True,
+            )
+        assert type(mapped_error.value) is type(constructed_error.value)
+
+    # * test: map_raises_when_action_without_pattern
+    def test_map_raises_when_action_without_pattern(self, test_ctx, session):
+        '''
+        Keep an action without a pattern on the complex branch, where it fails.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Mapping raises the same type as constructing the complex aggregate.
+        with pytest.raises(ValidationError) as mapped:
+            TokenRuleConfigObject(
+                name='NUMBER',
+                grammar_id='arithmetic',
+                action='return t',
+            ).map()
+        with pytest.raises(ValidationError) as constructed:
+            ComplexTokenRuleAggregate(
+                name='NUMBER',
+                grammar_id='arithmetic',
+                pattern=None,
+                action='return t',
+            )
+        assert type(mapped.value) is type(constructed.value)
+
+        # Clearing the pattern by override fails the same way.
+        with pytest.raises(ValidationError) as overridden:
+            TokenRuleConfigObject(
+                name='NUMBER',
+                grammar_id='arithmetic',
+                pattern='digits',
+                action='return t',
+            ).map(pattern=None)
+        assert type(overridden.value) is type(constructed.value)
+
+    # * test: presence_is_not_none
+    def test_presence_is_not_none(self, test_ctx, session):
+        '''
+        Treat an empty string as present, not as the synthetic shape.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # An empty action is still present and selects Complex.
+        complex_rule = TokenRuleConfigObject(
+            name='NUMBER',
+            grammar_id='arithmetic',
+            pattern='digits',
+            action='',
+        ).map()
+        assert isinstance(complex_rule, ComplexTokenRuleAggregate)
+        assert complex_rule.action == ''
+        assert complex_rule.pattern == 'digits'
+
+        # An empty pattern with no action is still present and selects Simple.
+        simple = TokenRuleConfigObject(
+            name='PLUS',
+            grammar_id='arithmetic',
+            pattern='',
+            action=None,
+        ).map()
+        assert isinstance(simple, SimpleTokenRuleAggregate)
+        assert simple.pattern == ''
+        assert 'action' not in type(simple).model_fields
+
+    # * test: synthetic_round_trip
+    def test_synthetic_round_trip(self, test_ctx, session):
+        '''
+        Round-trip a synthetic aggregate through to_data without pattern or action keys.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The same name round-trips under two grammars.
+        for grammar_id in ('arithmetic', 'logic'):
+            original = SyntheticTokenRuleAggregate(
+                name='INDENT',
+                grammar_id=grammar_id,
+            )
+            primitive = TokenRuleConfigObject.from_model(original).to_primitive('to_data')
+            assert primitive == {
+                'name': 'INDENT',
+                'grammar_id': grammar_id,
+            }
+            assert 'pattern' not in primitive
+            assert 'action' not in primitive
+            restored = TokenRuleConfigObject.model_validate(primitive).map()
+            assert isinstance(restored, SyntheticTokenRuleAggregate)
+            assert restored.model_dump() == original.model_dump()
+
+    # * test: from_model_synthetic_rule
+    def test_from_model_synthetic_rule(self, test_ctx, session):
+        '''
+        Copy identity only from a synthetic rule, and apply overrides last.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A synthetic domain rule copies neither pattern nor action.
+        config = TokenRuleConfigObject.from_model(SyntheticTokenRule(
+            name='INDENT',
+            grammar_id='arithmetic',
+        ))
+        assert config.name == 'INDENT'
+        assert config.grammar_id == 'arithmetic'
+        assert config.pattern is None
+        assert config.action is None
+
+        # A synthetic aggregate accepts an override applied last.
+        overridden = TokenRuleConfigObject.from_model(
+            SyntheticTokenRuleAggregate(
+                name='INDENT',
+                grammar_id='arithmetic',
+            ),
+            grammar_id='logic',
+        )
+        assert overridden.grammar_id == 'logic'
+        assert overridden.pattern is None
+        assert overridden.action is None
