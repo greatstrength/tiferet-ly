@@ -3,6 +3,7 @@
 # *** imports
 
 # ** core
+import re
 import sys
 import types
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -225,9 +226,12 @@ class PlyReader:
         '''
         Install selected token attributes onto a throwaway module.
 
-        A synthetic rule translates to None and is skipped here — it
+        A synthetic rule translates to None and is skipped here: it
         contributes no t_* attribute, though its name is already present
-        in module.tokens via derive_tokens below.
+        in module.tokens via derive_tokens below. A pattern-only rule is
+        installed as its t_<name> string. Complex rules are not installed
+        as t_<name> functions; together they become one ordered dispatcher
+        that matches them in selected order.
 
         :param module: The module receiving tokens and t_* attrs.
         :type module: Any
@@ -240,7 +244,8 @@ class PlyReader:
         # Derive the tokens list in selected order, never sorted.
         module.tokens = RuleTranslator.derive_tokens(selected_tokens)
 
-        # Translate each token and bind callables onto the module they live in.
+        # Translate each token; strings install, complex actions queue in order.
+        ordered: List[Tuple[str, str, Callable]] = []
         for rule in selected_tokens:
             translated = RuleTranslator.translate_token_rule(
                 rule,
@@ -251,17 +256,44 @@ class PlyReader:
             if translated is None:
                 continue
 
+            # A complex rule joins the ordered dispatcher, not a t_<name> function.
             attr_name, value = translated
-            setattr(
-                module,
-                attr_name,
-                self.bind_callable(
-                    module,
-                    attr_name,
-                    value,
-                    regex=rule.pattern if callable(value) else None,
-                ),
-            )
+            if callable(value):
+                ordered.append((rule.name, rule.pattern, value))
+                continue
+
+            # A pattern-only rule stays a PLY string rule.
+            setattr(module, attr_name, value)
+
+        # No complex rules means no dispatcher.
+        if not ordered:
+            return
+
+        # Compile each complex pattern with the reflags lex.lex receives (0).
+        walk = [
+            (name, re.compile(pattern, flags=0), action)
+            for name, pattern, action in ordered
+        ]
+
+        # The dispatcher pattern joins the complex patterns in selected order.
+        joined = '|'.join(f'(?:{pattern})' for _name, pattern, _action in ordered)
+
+        # The walk picks the winner: first re.match at t.lexpos on the original text.
+        def dispatch(t):
+            for name, compiled, action in walk:
+                if compiled.match(t.lexer.lexdata, t.lexpos) is not None:
+                    t.type = name
+                    return action(t)
+            return t
+
+        # Name the dispatcher clear of t_error, t_ignore, t_eof, and t_<selected name>.
+        reserved = {'error', 'ignore', 'eof', *module.tokens}
+        suffix = 'tiferet_ly_ordered'
+        while suffix in reserved:
+            suffix = f'{suffix}_'
+
+        # Install exactly one function rule for the whole complex set.
+        self.bind_callable(module, f't_{suffix}', dispatch, regex=joined)
 
     # * method: build_lexer_module
     def build_lexer_module(
