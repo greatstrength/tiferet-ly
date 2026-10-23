@@ -2,8 +2,10 @@
 
 # *** imports
 
-# ** app
+# ** infra
 from tiferet.repos.core import ConfigurationRepository
+
+# ** app
 from ..interfaces.grammar import GrammarService
 from ..mappers.grammar import (
     GrammarAggregate,
@@ -17,9 +19,10 @@ class GrammarConfigRepository(GrammarService, ConfigurationRepository):
     '''
     Persist a lean grammar as one id-keyed grammars mapping.
 
-    The body stores ordered parent identifiers and a start name. Saving does
-    not check that parents exist, that the graph is acyclic, or that the
-    start name is a production.
+    The body stores ordered parent identifiers, a start name, and an
+    optional ignore pattern. Saving does not copy ignore from parent_ids,
+    and it does not check that parents exist, that the graph is acyclic,
+    or that the start name is a production.
     '''
 
     # * init
@@ -66,8 +69,9 @@ class GrammarConfigRepository(GrammarService, ConfigurationRepository):
         '''
         Build the write body for a grammar aggregate.
 
-        The body key order is parent identifiers, then start. The identifier
-        stays the mapping key and is not written into the body.
+        The body key order is parent identifiers, then start, then ignore
+        when that value is a string. The identifier stays the mapping key.
+        A missing or null ignore is omitted. Layout is not written.
 
         :param grammar: The grammar aggregate to persist.
         :type grammar: GrammarAggregate
@@ -81,10 +85,16 @@ class GrammarConfigRepository(GrammarService, ConfigurationRepository):
         )
 
         # Keep only the lean body, in the required key order.
-        return {
+        body = {
             'parent_ids': list(primitive['parent_ids']),
             'start': primitive['start'],
         }
+
+        # Write ignore last, only when it is a string. An empty string is written.
+        ignore = primitive.get('ignore')
+        if isinstance(ignore, str):
+            body['ignore'] = ignore
+        return body
 
     # * method: exists
     def exists(self, id: str) -> bool:

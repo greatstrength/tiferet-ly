@@ -10,11 +10,11 @@ from pathlib import Path
 # ** infra
 import pytest
 import yaml
-
-# ** app
 from tiferet import use_tester
 from tiferet.interfaces import Service
 from tiferet.repos.core import ConfigurationRepository
+
+# ** app
 from tiferet_ly.interfaces import grammar as grammar_interface
 from tiferet_ly.interfaces.grammar import GrammarService
 from tiferet_ly.mappers.grammar import (
@@ -34,12 +34,16 @@ _FORBIDDEN_BODY_KEYS = (
     'subgrammar',
     'precedence',
     'associativity',
+    'layout',
 )
 
 # *** functions
 
 # ** function: grammar_aggregate
-def _grammar(id: str, parent_ids: list[str], start: str) -> GrammarAggregate:
+def _grammar(id: str,
+             parent_ids: list[str],
+             start: str,
+             ignore: str | None = None) -> GrammarAggregate:
     '''
     Build a grammar aggregate through the consumed config object.
 
@@ -49,16 +53,23 @@ def _grammar(id: str, parent_ids: list[str], start: str) -> GrammarAggregate:
     :type parent_ids: list[str]
     :param start: The declared start-production name.
     :type start: str
+    :param ignore: The optional ignore pattern. None omits the key.
+    :type ignore: str | None
     :return: The mapped grammar aggregate.
     :rtype: GrammarAggregate
     '''
 
-    # Tests construct aggregates only through model_validate().map().
-    return GrammarConfigObject.model_validate({
+    # Omit ignore when it is None. A string, including '', is passed.
+    payload = {
         'id': id,
         'parent_ids': parent_ids,
         'start': start,
-    }).map()
+    }
+    if ignore is not None:
+        payload['ignore'] = ignore
+
+    # Tests construct aggregates only through model_validate().map().
+    return GrammarConfigObject.model_validate(payload).map()
 
 # ** function: parsed_yaml
 def _parsed(path: Path) -> dict:
@@ -176,7 +187,7 @@ def test_test_module_imports():
     target_cls=GrammarConfigRepository,
     config_parameter='grammar_config',
     aggregate_cls=GrammarAggregate,
-    equality_fields=['id', 'parent_ids', 'start'],
+    equality_fields=['id', 'parent_ids', 'start', 'ignore'],
     exists_cases=[
         ('arithmetic', True),
         ('missing', False),
@@ -186,6 +197,7 @@ def test_test_module_imports():
             'id': 'arithmetic',
             'parent_ids': [],
             'start': 'expression',
+            'ignore': None,
         }),
         ('missing', None),
     ],
@@ -263,7 +275,7 @@ class TestGrammarConfigRepository:
             'arithmetic_with_names',
         ]
         assert test_ctx.domain.delete_ids == ['arithmetic_with_names']
-        assert test_ctx.domain.equality_fields == ['id', 'parent_ids', 'start']
+        assert test_ctx.domain.equality_fields == ['id', 'parent_ids', 'start', 'ignore']
 
         # Package markers export nothing and do not import these classes.
         interfaces_marker = Path(grammar_interface.__file__).parent / '__init__.py'
@@ -608,3 +620,204 @@ class TestGrammarConfigRepository:
         }
         for key in _FORBIDDEN_BODY_KEYS:
             assert key not in parsed['grammars']['arithmetic']
+
+    # * test: declared_ignore_round_trip
+    def test_declared_ignore_round_trip(self, test_ctx, session, write_yaml):
+        '''
+        Write a declared ignore string last and reload it unchanged.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Save space-then-tab, empty, and invalid-regex patterns. None raises.
+        path = write_yaml({})
+        patterns = {
+            'space': ' \t',
+            'empty': '',
+            'invalid': '[',
+        }
+        for grammar_id, ignore in patterns.items():
+            repo = test_ctx.make_target(config_file=str(path))
+            assert repo.save(_grammar(grammar_id, [], 'expression', ignore=ignore)) is None
+
+        # Each body is parents, start, then ignore, and reloads the same string.
+        bodies = _parsed(path)['grammars']
+        repo = test_ctx.make_target(config_file=str(path))
+        for grammar_id, ignore in patterns.items():
+            body = bodies[grammar_id]
+            assert list(body) == ['parent_ids', 'start', 'ignore']
+            assert body['parent_ids'] == []
+            assert body['start'] == 'expression'
+            assert body['ignore'] == ignore
+            assert 'id' not in body
+            for key in _FORBIDDEN_BODY_KEYS:
+                assert key not in body
+            assert repo.get(grammar_id).ignore == ignore
+
+        # Saving space again without ignore removes the key and reloads None.
+        repo.save(_grammar('space', [], 'expression'))
+        bodies = _parsed(path)['grammars']
+        assert list(bodies['space']) == ['parent_ids', 'start']
+        assert 'ignore' not in bodies['space']
+        repo = test_ctx.make_target(config_file=str(path))
+        assert repo.get('space').ignore is None
+
+        # The other ids keep their bodies and reloaded patterns.
+        for grammar_id in ('empty', 'invalid'):
+            assert bodies[grammar_id]['ignore'] == patterns[grammar_id]
+            assert list(bodies[grammar_id]) == ['parent_ids', 'start', 'ignore']
+            assert repo.get(grammar_id).ignore == patterns[grammar_id]
+
+    # * test: shipped_grammars_file_omits_ignore
+    def test_shipped_grammars_file_omits_ignore(self, test_ctx, session):
+        '''
+        Load the shipped grammar file, which omits ignore, as None without writing it.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Resolve the shipped configuration from the repository root.
+        root = Path(__file__).resolve().parents[2]
+        grammars_path = root / 'configs' / 'grammars.yml'
+        di_path = root / 'configs' / 'di.yml'
+
+        # The shipped grammar body has no ignore or layout key.
+        parsed = _parsed(grammars_path)
+        assert parsed == {'grammars': {'arith': {'parent_ids': [], 'start': 'expr'}}}
+        assert 'ignore' not in parsed['grammars']['arith']
+        assert 'layout' not in parsed['grammars']['arith']
+
+        # The grammar service still points at this repository and that file.
+        service = _parsed(di_path)['services']['grammar_service']
+        assert service['module_path'] == 'tiferet_ly.repos.grammar'
+        assert service['class_name'] == 'GrammarConfigRepository'
+        assert service['params']['grammar_config'] == 'configs/grammars.yml'
+
+        # Reads load the omitted ignore as None and leave the file bytes unchanged.
+        before = grammars_path.read_bytes()
+        repo = test_ctx.make_target(config_file=str(grammars_path))
+        assert repo.exists('arith') is True
+        assert repo.get('arith').ignore is None
+        assert repo.get('arith').parent_ids == []
+        assert repo.get('arith').start == 'expr'
+        assert repo.get('missing') is None
+        assert grammars_path.read_bytes() == before
+
+    # * test: ignore_is_not_copied_from_parent_ids
+    def test_ignore_is_not_copied_from_parent_ids(self, test_ctx, session, write_yaml):
+        '''
+        Load and save a child grammar without taking its parent's ignore.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Seed a parent with ignore and a child that omits it.
+        path = write_yaml({
+            'grammars': {
+                'arithmetic': {
+                    'parent_ids': [],
+                    'start': 'expression',
+                    'ignore': ' \t',
+                },
+                'dialect': {
+                    'parent_ids': ['arithmetic', 'names'],
+                    'start': 'expression',
+                },
+            },
+        })
+        before = path.read_bytes()
+        repo = test_ctx.make_target(config_file=str(path))
+
+        # Reads keep each grammar's own ignore and do not write the file.
+        assert repo.get('arithmetic').ignore == ' \t'
+        dialect = repo.get('dialect')
+        assert dialect.parent_ids == ['arithmetic', 'names']
+        assert dialect.ignore is None
+        for item in repo.list():
+            if item.id == 'dialect':
+                assert item.ignore is None
+        assert path.read_bytes() == before
+
+        # Saving the child does not copy the parent's pattern onto it.
+        repo.save(dialect)
+        bodies = _parsed(path)['grammars']
+        assert list(bodies['dialect']) == ['parent_ids', 'start']
+        assert 'ignore' not in bodies['dialect']
+        repo = test_ctx.make_target(config_file=str(path))
+        assert repo.get('dialect').ignore is None
+
+        # The parent body is unchanged.
+        assert bodies['arithmetic'] == {
+            'parent_ids': [],
+            'start': 'expression',
+            'ignore': ' \t',
+        }
+
+    # * test: save_omits_layout
+    def test_save_omits_layout(self, test_ctx, session, write_yaml):
+        '''
+        Leave a seeded layout key on read, drop it on save, and keep it on other keys.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Seed two bodies that already carry a layout mapping.
+        layout = {'indent_token': 'INDENT', 'dedent_token': 'DEDENT'}
+        path = write_yaml({
+            'grammars': {
+                'arithmetic': {
+                    'parent_ids': [],
+                    'start': 'expression',
+                    'layout': dict(layout),
+                },
+                'kept': {
+                    'parent_ids': [],
+                    'start': 'expression',
+                    'layout': dict(layout),
+                },
+            },
+        })
+        before = path.read_bytes()
+        repo = test_ctx.make_target(config_file=str(path))
+
+        # A read maps the body and leaves both layout keys in the file.
+        loaded = repo.get('arithmetic')
+        assert loaded.ignore is None
+        assert loaded.parent_ids == []
+        assert loaded.start == 'expression'
+        assert path.read_bytes() == before
+
+        # Saving one key writes the lean body without layout or ignore.
+        assert repo.save(_grammar('arithmetic', ['names'], 'term')) is None
+        repo = test_ctx.make_target(config_file=str(path))
+        reloaded = repo.get('arithmetic')
+        assert reloaded.parent_ids == ['names']
+        assert reloaded.start == 'term'
+        assert reloaded.ignore is None
+        bodies = _parsed(path)['grammars']
+        assert bodies['arithmetic'] == {
+            'parent_ids': ['names'],
+            'start': 'term',
+        }
+
+        # The key that was not saved keeps its layout and gains no ignore.
+        assert bodies['kept']['layout'] == layout
+        assert 'ignore' not in bodies['kept']
