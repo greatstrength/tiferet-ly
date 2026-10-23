@@ -13,7 +13,7 @@ from ..interfaces.lexer import LexerService
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate
 from ..mappers.token import TokenRuleAggregate
-from .settings import parameters_required
+from .core import parameters_required
 
 # *** events
 

@@ -1,4 +1,4 @@
-"""Tiferet-Ly Domain Event Settings"""
+"""Tiferet-Ly Domain Event Core"""
 
 # *** imports
 

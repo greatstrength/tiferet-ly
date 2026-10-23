@@ -215,22 +215,34 @@ def test_lex_text_checks_a_positional_call() -> None:
         rewrites=None,
     )
 
-# ** test: lex_text_positional_call_still_requires_text
-@pytest.mark.parametrize('text', [None, ''])
-def test_lex_text_positional_call_still_requires_text(text) -> None:
+# ** test: lex_text_positional_call_checks_each_required_parameter
+@pytest.mark.parametrize('name, value', [
+    ('grammar_id', None),
+    ('text', None),
+    ('text', ''),
+    ('tokens', None),
+    ('grammars', None),
+])
+def test_lex_text_positional_call_checks_each_required_parameter(name, value) -> None:
     '''
-    Test that a positional LexText.execute call with a None or blank text
-    still fails the required-parameter check before the service.
+    Test that a positional LexText.execute call with a None or blank
+    required argument fails the required-parameter check for that name
+    before the service.
     '''
+
+    # Build the positional call with one required slot emptied.
+    tokens, _productions, grammars = catalogues()
+    args = dict(grammar_id='arith', text='1', tokens=tokens, grammars=grammars)
+    args[name] = value
+    lexer_service = Mock()
 
     # Execute LexText positionally and expect the required-parameter failure.
-    tokens, _productions, grammars = catalogues()
-    lexer_service = Mock()
     with pytest.raises(TiferetError) as raised:
-        LexText(lexer_service).execute('arith', text, tokens, grammars)
+        LexText(lexer_service).execute(*args.values())
 
-    # Assert the failure names text and the service was not called.
-    assert 'text' in str(raised.value)
+    # Assert the failure names only that parameter and the service was not called.
+    assert raised.value.error_code == 'COMMAND_PARAMETER_REQUIRED'
+    assert raised.value.kwargs['parameters'] == [name]
     lexer_service.tokenize.assert_not_called()
 
 # ** test: parse_text_keeps_text_second_positionally
@@ -302,6 +314,36 @@ def test_parse_text_checks_a_positional_call() -> None:
         lexemes=None,
         rewrites=None,
     )
+
+# ** test: parse_text_positional_call_checks_each_required_parameter
+@pytest.mark.parametrize('name', ['grammar_id', 'tokens', 'productions', 'grammars'])
+def test_parse_text_positional_call_checks_each_required_parameter(name) -> None:
+    '''
+    Test that a positional ParseText.execute call with a None required
+    argument fails the required-parameter check for that name before the
+    service.
+    '''
+
+    # Build the positional call with one required slot emptied.
+    tokens, productions, grammars = catalogues()
+    args = dict(
+        grammar_id='arith',
+        text='1',
+        tokens=tokens,
+        productions=productions,
+        grammars=grammars,
+    )
+    args[name] = None
+    parser_service = Mock()
+
+    # Execute ParseText positionally and expect the required-parameter failure.
+    with pytest.raises(TiferetError) as raised:
+        ParseText(parser_service).execute(*args.values())
+
+    # Assert the failure names only that parameter and the service was not called.
+    assert raised.value.error_code == 'COMMAND_PARAMETER_REQUIRED'
+    assert raised.value.kwargs['parameters'] == [name]
+    parser_service.parse.assert_not_called()
 
 # ** test: parse_text_forwards_lexemes_without_text
 def test_parse_text_forwards_lexemes_without_text() -> None:
