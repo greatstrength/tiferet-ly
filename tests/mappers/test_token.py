@@ -266,7 +266,6 @@ def test_token_rule_aggregate_mutations() -> None:
     assert isinstance(simple, TokenRuleAggregate)
     assert isinstance(complex_rule, TokenRuleAggregate)
 
-
 # ** test: synthetic_token_rule_aggregate_has_no_pattern_mutator
 def test_synthetic_token_rule_aggregate_has_no_pattern_mutator() -> None:
     '''

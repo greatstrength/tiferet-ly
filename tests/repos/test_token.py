@@ -202,7 +202,6 @@ def test_int_token_repo_serialized_yaml_shape(token_repo: TokenConfigRepository)
         ],
     }
 
-
 # ** test_int: token_repo_synthetic_add_get_and_yaml_shape
 def test_int_token_repo_synthetic_add_get_and_yaml_shape(token_repo: TokenConfigRepository) -> None:
     '''
@@ -239,7 +238,6 @@ def test_int_token_repo_synthetic_add_get_and_yaml_shape(token_repo: TokenConfig
     # A second save of the same pair replaces the entry without moving it.
     token_repo.save(SyntheticTokenRuleAggregate(name='INDENT', grammar_id='core'))
     assert names(token_repo.list()) == ['PLUS', 'INDENT', 'MINUS']
-
 
 # ** test_int: token_repo_synthetic_list_remove_and_re_add
 def test_int_token_repo_synthetic_list_remove_and_re_add(token_repo: TokenConfigRepository) -> None:

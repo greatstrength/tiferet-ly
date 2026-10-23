@@ -88,7 +88,6 @@ def complex_token(
         action=action,
     )
 
-
 # ** function: synthetic_token
 def synthetic_token(
         name: str = 'INDENT',
@@ -109,7 +108,6 @@ def synthetic_token(
         name=name,
         grammar_id=grammar_id,
     )
-
 
 # ** function: token_service
 def token_service(**attrs) -> Mock:
@@ -209,7 +207,6 @@ def test_add_token_with_action_is_complex() -> None:
     assert isinstance(token, ComplexTokenRuleAggregate)
     assert token.action == 't.value = int(t.value)'
 
-
 # ** test: add_token_with_no_pattern_or_action_is_synthetic
 def test_add_token_with_no_pattern_or_action_is_synthetic() -> None:
     '''
@@ -233,7 +230,6 @@ def test_add_token_with_no_pattern_or_action_is_synthetic() -> None:
         assert token.name == 'INDENT'
         assert token.grammar_id == 'missing'
         service.save.assert_called_once_with(token)
-
 
 # ** test: add_token_blank_pattern_is_present
 def test_add_token_blank_pattern_is_present() -> None:
@@ -270,7 +266,6 @@ def test_add_token_blank_pattern_is_present() -> None:
     assert isinstance(complex_rule, ComplexTokenRuleAggregate)
     assert complex_rule.action == ''
 
-
 # ** test: add_token_action_without_pattern_raises
 def test_add_token_action_without_pattern_raises() -> None:
     '''
@@ -293,7 +288,6 @@ def test_add_token_action_without_pattern_raises() -> None:
             )
         service.save.assert_not_called()
 
-
 # ** test: add_token_duplicate_synthetic_raises
 def test_add_token_duplicate_synthetic_raises() -> None:
     '''
@@ -314,7 +308,6 @@ def test_add_token_duplicate_synthetic_raises() -> None:
         )
     assert raised.value.error_code == a.error.TOKEN_ALREADY_EXISTS_ID
     service.save.assert_not_called()
-
 
 # ** test: get_token_raises_when_missing
 def test_get_token_raises_when_missing() -> None:
@@ -403,7 +396,6 @@ def test_reassign_token_grammar_rejects_existing_pair() -> None:
     assert raised.value.error_code == a.error.TOKEN_ALREADY_EXISTS_ID
     service.save.assert_not_called()
 
-
 # ** test: rename_and_reassign_synthetic_token_stay_synthetic
 def test_rename_and_reassign_synthetic_token_stay_synthetic() -> None:
     '''
@@ -445,7 +437,6 @@ def test_rename_and_reassign_synthetic_token_stay_synthetic() -> None:
     assert 'pattern' not in reassigned.model_dump()
     assert 'action' not in reassigned.model_dump()
 
-
 # ** test: rename_synthetic_token_rejects_existing_pair
 def test_rename_synthetic_token_rejects_existing_pair() -> None:
     '''
@@ -470,7 +461,6 @@ def test_rename_synthetic_token_rejects_existing_pair() -> None:
     assert raised.value.error_code == a.error.TOKEN_ALREADY_EXISTS_ID
     service.save.assert_not_called()
 
-
 # ** test: set_token_pattern_updates_and_saves
 def test_set_token_pattern_updates_and_saves() -> None:
     '''
@@ -491,7 +481,6 @@ def test_set_token_pattern_updates_and_saves() -> None:
     # Assert the pattern changed and the token was saved.
     assert result.pattern == r'\+\+'
     service.save.assert_called_once_with(token)
-
 
 # ** test: set_token_pattern_on_complex_saves
 def test_set_token_pattern_on_complex_saves() -> None:
@@ -514,7 +503,6 @@ def test_set_token_pattern_on_complex_saves() -> None:
     assert isinstance(result, ComplexTokenRuleAggregate)
     assert result.pattern == r'\d+\.\d+'
     service.save.assert_called_once_with(token)
-
 
 # ** test: set_token_pattern_missing_or_blank_pattern_raises
 def test_set_token_pattern_missing_or_blank_pattern_raises() -> None:
@@ -539,7 +527,6 @@ def test_set_token_pattern_missing_or_blank_pattern_raises() -> None:
         assert raised.value.error_code == COMMAND_PARAMETER_REQUIRED_ID
         service.save.assert_not_called()
 
-
 # ** test: set_token_pattern_missing_token_raises
 def test_set_token_pattern_missing_token_raises() -> None:
     '''
@@ -560,7 +547,6 @@ def test_set_token_pattern_missing_token_raises() -> None:
         )
     assert raised.value.error_code == a.error.TOKEN_NOT_FOUND_ID
     service.save.assert_not_called()
-
 
 # ** test: set_token_pattern_on_synthetic_raises
 def test_set_token_pattern_on_synthetic_raises() -> None:
@@ -591,7 +577,6 @@ def test_set_token_pattern_on_synthetic_raises() -> None:
     assert isinstance(token, SyntheticTokenRuleAggregate)
     assert 'pattern' not in token.model_dump()
 
-
 # ** test: set_token_action_on_simple_raises
 def test_set_token_action_on_simple_raises() -> None:
     '''
@@ -612,7 +597,6 @@ def test_set_token_action_on_simple_raises() -> None:
         )
     assert raised.value.error_code == a.error.TOKEN_ACTION_NOT_SUPPORTED_ID
     service.save.assert_not_called()
-
 
 # ** test: set_token_action_on_synthetic_raises
 def test_set_token_action_on_synthetic_raises() -> None:
@@ -637,7 +621,6 @@ def test_set_token_action_on_synthetic_raises() -> None:
     assert raised.value.error_code == a.error.TOKEN_ACTION_NOT_SUPPORTED_ID
     service.save.assert_not_called()
     assert isinstance(token, SyntheticTokenRuleAggregate)
-
 
 # ** test: set_token_action_on_complex_saves
 def test_set_token_action_on_complex_saves() -> None:
