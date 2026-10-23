@@ -146,7 +146,7 @@ class TestGrammarAggregate:
 
         # Bases and model fields match the published boundary.
         assert GrammarAggregate.__bases__ == (Grammar, Aggregate)
-        assert set(GrammarAggregate.model_fields) == {'id', 'parent_ids', 'start', 'ignore'}
+        assert set(GrammarAggregate.model_fields) == {'id', 'parent_ids', 'start', 'ignore', 'layout'}
         test_ctx.assert_new()
 
     # * test: retired_shape_absent
@@ -235,7 +235,7 @@ class TestGrammarAggregate:
             start='expr',
         )
         assert grammar.ignore is None
-        assert 'layout' not in GrammarAggregate.model_fields
+        assert grammar.layout is None
 
 # ** tester: test_grammar_config_object
 @use_tester(
@@ -272,7 +272,7 @@ class TestGrammarConfigObject:
 
         # Bases, roles, and model fields match the published boundary.
         assert GrammarConfigObject.__bases__ == (Grammar, TransferObject)
-        assert set(GrammarConfigObject.model_fields) == {'id', 'parent_ids', 'start', 'ignore'}
+        assert set(GrammarConfigObject.model_fields) == {'id', 'parent_ids', 'start', 'ignore', 'layout'}
         assert GrammarConfigObject._ROLES == {
             'to_model': {},
             'to_data': {'by_alias': True, 'exclude': {'id'}},
@@ -515,7 +515,7 @@ class TestGrammarConfigObject:
         assert mapped.parent_ids == ['term']
         assert mapped.start == 'expr'
         assert mapped.ignore == ' \t'
-        assert 'layout' not in mapped.model_dump()
+        assert mapped.layout is None
 
     # * test: map_without_ignore_stays_valid
     def test_map_without_ignore_stays_valid(self, test_ctx, session):
@@ -547,28 +547,3 @@ class TestGrammarConfigObject:
         ).map()
         assert child.ignore is None
         assert child.parent_ids == ['arith']
-
-    # * test: layout_key_is_dropped
-    def test_layout_key_is_dropped(self, test_ctx, session):
-        '''
-        Drop a layout configuration key as unused input.
-
-        :param test_ctx: The bound transfer-object tester context.
-        :type test_ctx: TransferObjectTesterContext
-        :param session: A fresh test session.
-        :type session: TestSessionContext
-        '''
-
-        # Layout is not a field, so it is neither serialized nor mapped.
-        config = GrammarConfigObject.model_validate({
-            'id': 'expr',
-            'parent_ids': [],
-            'start': 'expr',
-            'layout': {'indent_token': 'INDENT', 'dedent_token': 'DEDENT'},
-        })
-        assert 'layout' not in GrammarConfigObject.model_fields
-        assert not hasattr(config, 'layout')
-        assert 'layout' not in config.to_primitive('to_data')
-        mapped = config.map()
-        assert 'layout' not in mapped.model_dump()
-        assert mapped.ignore is None

@@ -6,12 +6,15 @@
 from typing import Optional
 
 # ** infra
+import pytest
+from pydantic import ValidationError
 from tiferet import use_tester
 from tiferet.domain.core import DomainObject
 
 # ** app
 from tiferet_ly.domain import grammar as grammar_module
 from tiferet_ly.domain.grammar import Grammar
+from tiferet_ly.domain.layout import LayoutProfile
 
 # *** testers
 
@@ -44,9 +47,8 @@ class TestGrammar:
 
         # Assert the model is a domain object with exactly those fields, in order.
         assert issubclass(Grammar, DomainObject)
-        assert list(Grammar.model_fields) == ['id', 'parent_ids', 'start', 'ignore']
-        assert set(Grammar.model_fields) == {'id', 'parent_ids', 'start', 'ignore'}
-        assert 'layout' not in Grammar.model_fields
+        assert list(Grammar.model_fields) == ['id', 'parent_ids', 'start', 'ignore', 'layout']
+        assert set(Grammar.model_fields) == {'id', 'parent_ids', 'start', 'ignore', 'layout'}
 
         # Assert ignore is an optional string that defaults to None.
         ignore = Grammar.model_fields['ignore']
@@ -57,6 +59,19 @@ class TestGrammar:
             'A bare regular-expression character class PLY skips before attempting any '
             'token rule, installed as the literal t_ignore module attribute PLY\'s own '
             'convention expects. Grammar-own, like start: not composed across parent_ids.'
+        )
+
+        # Assert layout follows ignore as an optional profile that defaults to None.
+        names = list(Grammar.model_fields)
+        assert names.index('layout') == names.index('ignore') + 1
+        layout = Grammar.model_fields['layout']
+        assert layout.annotation == LayoutProfile | None
+        assert layout.default is None
+        assert layout.is_required() is False
+        assert layout.description == (
+            'The declared indentation/delimiter layout policy a LayoutFilter applies to '
+            'this grammar\'s lexeme stream. Grammar-own, like start and ignore: not '
+            'composed across parent_ids.'
         )
 
         # Assert construction from the unchanged sample data.
@@ -249,3 +264,124 @@ class TestGrammar:
         )
         assert child.parent_ids == ['expr', 'factor']
         assert child.ignore is None
+
+    # * test: layout_defaults_to_none
+    def test_layout_defaults_to_none(self, test_ctx, session):
+        '''
+        Store no layout profile when layout is omitted or None.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Omitting layout stores None.
+        grammar = Grammar(
+            id='arith',
+            start='expr',
+        )
+        assert grammar.layout is None
+        assert grammar.parent_ids == []
+
+        # Passing layout=None stores None, even with parents.
+        grammar = Grammar(
+            id='arith',
+            parent_ids=['expr', 'factor'],
+            start='expr',
+            layout=None,
+        )
+        assert grammar.layout is None
+        assert grammar.parent_ids == ['expr', 'factor']
+
+    # * test: layout_construct
+    def test_layout_construct(self, test_ctx, session):
+        '''
+        Store a declared profile by identity and validate a profile mapping.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A profile instance is stored by identity, and parents do not clear it.
+        profile = LayoutProfile(
+            indent_token='INDENT',
+            dedent_token='DEDENT',
+        )
+        grammar = Grammar(
+            id='arith',
+            parent_ids=['expr'],
+            start='expr',
+            layout=profile,
+        )
+        assert grammar.layout is profile
+        assert grammar.layout.indent_token == 'INDENT'
+        assert grammar.layout.dedent_token == 'DEDENT'
+        assert grammar.parent_ids == ['expr']
+
+        # A mapping of profile fields is validated as a profile, not stored as a dict.
+        grammar = Grammar(
+            id='arith',
+            parent_ids=[],
+            start='expr',
+            layout={'indent_token': 'INDENT', 'dedent_token': 'DEDENT'},
+        )
+        assert isinstance(grammar.layout, LayoutProfile)
+        assert not isinstance(grammar.layout, dict)
+        assert grammar.layout.indent_token == 'INDENT'
+        assert grammar.layout.dedent_token == 'DEDENT'
+
+    # * test: layout_rejects_non_profile
+    def test_layout_rejects_non_profile(self, test_ctx, session):
+        '''
+        Reject a layout value that is not a profile.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A bare string is not a layout profile.
+        with pytest.raises(ValidationError):
+            Grammar(
+                id='arith',
+                parent_ids=[],
+                start='expr',
+                layout='INDENT',
+            )
+
+    # * test: layout_not_inherited_through_parent_ids
+    def test_layout_not_inherited_through_parent_ids(self, test_ctx, session):
+        '''
+        Keep layout grammar-own: a child does not receive a parent's profile.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A parent grammar declares its own layout profile.
+        declared = Grammar(
+            id='expr',
+            parent_ids=[],
+            start='expr',
+            layout=LayoutProfile(
+                indent_token='INDENT',
+                dedent_token='DEDENT',
+            ),
+        )
+        assert declared.layout is not None
+
+        # A child that lists that parent does not inherit the profile.
+        child = Grammar(
+            id='arith',
+            parent_ids=['expr'],
+            start='expr',
+        )
+        assert child.layout is None
+        assert child.layout is not declared.layout
+        assert child.parent_ids == ['expr']
