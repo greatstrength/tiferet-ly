@@ -5,14 +5,15 @@
 # ** core
 import ast
 from pathlib import Path
+from typing import Any
 
 # ** infra
 import pytest
 from pydantic import ValidationError
-
-# ** app
 from tiferet import use_tester
 from tiferet.domain.core import DomainObject
+
+# ** app
 from tiferet_ly.domain import lexeme as lexeme_domain
 from tiferet_ly.domain.lexeme import Lexeme
 
@@ -85,9 +86,15 @@ class TestLexeme:
         assert issubclass(Lexeme, DomainObject)
         assert set(Lexeme.model_fields) == {'type', 'value', 'lineno', 'lexpos'}
         assert Lexeme.model_fields['type'].annotation is str
-        assert Lexeme.model_fields['value'].annotation is str
+
+        # The payload is optional and untyped. The span fields stay required.
+        assert Lexeme.model_fields['value'].annotation == Any | None
+        assert not Lexeme.model_fields['value'].is_required()
+        assert Lexeme.model_fields['value'].default is None
         assert Lexeme.model_fields['lineno'].annotation is int
+        assert Lexeme.model_fields['lineno'].is_required()
         assert Lexeme.model_fields['lexpos'].annotation is int
+        assert Lexeme.model_fields['lexpos'].is_required()
         test_ctx.assert_new()
 
     # * test: required_and_closed
@@ -101,7 +108,11 @@ class TestLexeme:
         :type session: TestSessionContext
         '''
 
-        # Every published field is required.
+        # The type, line, and position are required.
+        with pytest.raises(ValidationError):
+            Lexeme(value='3', lineno=1, lexpos=0)
+        with pytest.raises(ValidationError):
+            Lexeme(type='NUMBER', value='3', lexpos=0)
         with pytest.raises(ValidationError):
             Lexeme(type='NUMBER', value='3', lineno=1)
 
@@ -114,3 +125,53 @@ class TestLexeme:
                 lexpos=0,
                 unused=True,
             )
+
+    # * test: text_and_absent_payload
+    def test_text_and_absent_payload(self, test_ctx, session):
+        '''
+        Store matched text, empty text, and an absent payload.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A recognized text token keeps its matched text.
+        text = Lexeme(type='NUMBER', value='3', lineno=1, lexpos=0)
+        assert text.value == '3'
+        assert type(text.value) is str
+        assert text.lineno == 1
+        assert text.lexpos == 0
+
+        # Empty text is present, not absent.
+        empty = Lexeme(type='NUMBER', value='', lineno=1, lexpos=0)
+        assert empty.value == ''
+
+        # An omitted payload is stored as None.
+        omitted = Lexeme(type='INDENT', lineno=2, lexpos=4)
+        assert omitted.value is None
+        assert omitted.type == 'INDENT'
+        assert omitted.lineno == 2
+        assert omitted.lexpos == 4
+
+        # An explicit None payload is stored as None.
+        explicit = Lexeme(type='DEDENT', value=None, lineno=2, lexpos=4)
+        assert explicit.value is None
+
+    # * test: payload_is_not_coerced_to_text
+    def test_payload_is_not_coerced_to_text(self, test_ctx, session):
+        '''
+        Keep a non-string payload as assigned.
+
+        :param test_ctx: The bound domain tester context.
+        :type test_ctx: DomainTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # An int payload stays an int.
+        lexeme = Lexeme(type='NUMBER', value=3, lineno=1, lexpos=0)
+        assert lexeme.value == 3
+        assert type(lexeme.value) is int
+        assert lexeme.value != '3'
