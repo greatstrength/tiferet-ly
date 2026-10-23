@@ -108,10 +108,10 @@ def test_does_not_import_ply():
     # The stream utility imports no PLY, event, or domain module.
     for module in stream_modules:
         assert module != 'ply' and not module.startswith('ply.')
-    assert 'tiferet_ly.events' not in stream_modules
-    assert 'tiferet_ly.domain' not in stream_modules
+        assert module != 'tiferet_ly.events' and not module.startswith('tiferet_ly.events.')
+        assert module != 'tiferet_ly.domain' and not module.startswith('tiferet_ly.domain.')
 
     # This test module imports no PLY or event module.
     for module in test_modules:
         assert module != 'ply' and not module.startswith('ply.')
-    assert 'tiferet_ly.events' not in test_modules
+        assert module != 'tiferet_ly.events' and not module.startswith('tiferet_ly.events.')
