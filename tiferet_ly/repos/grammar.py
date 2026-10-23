@@ -22,7 +22,8 @@ class GrammarConfigRepository(GrammarService, ConfigurationRepository):
     The body stores ordered parent identifiers, a start name, and an
     optional ignore pattern. Saving does not copy ignore from parent_ids,
     and it does not check that parents exist, that the graph is acyclic,
-    or that the start name is a production.
+    or that the start name is a production. A declared layout profile is
+    stored on that grammar alone. It is not copied from parent_ids.
     '''
 
     # * init
@@ -71,7 +72,9 @@ class GrammarConfigRepository(GrammarService, ConfigurationRepository):
 
         The body key order is parent identifiers, then start, then ignore
         when that value is a string. The identifier stays the mapping key.
-        A missing or null ignore is omitted. Layout is not written.
+        A missing or null ignore is omitted. A layout profile, when present,
+        is the last key; a missing profile is omitted rather than written
+        as null.
 
         :param grammar: The grammar aggregate to persist.
         :type grammar: GrammarAggregate
@@ -90,10 +93,33 @@ class GrammarConfigRepository(GrammarService, ConfigurationRepository):
             'start': primitive['start'],
         }
 
-        # Write ignore last, only when it is a string. An empty string is written.
+        # Write ignore after start, only when it is a string. An empty string is written.
         ignore = primitive.get('ignore')
         if isinstance(ignore, str):
             body['ignore'] = ignore
+
+        # Omit a missing or null profile. Do not write null.
+        layout = primitive.get('layout')
+        if layout is None:
+            return body
+
+        # Write the profile last, in the declared key order, with copied lists.
+        profile = {
+            'block_tokens': list(layout.get('block_tokens', [])),
+            'open_delimiters': list(layout.get('open_delimiters', [])),
+            'close_delimiters': list(layout.get('close_delimiters', [])),
+        }
+
+        # Write the newline token only when it is declared.
+        if layout.get('newline_token') is not None:
+            profile['newline_token'] = layout['newline_token']
+
+        # Keep False and 0 as given. Required names have no default.
+        profile['suppress_newline_in_delimiters'] = layout.get('suppress_newline_in_delimiters', True)
+        profile['indent_token'] = layout['indent_token']
+        profile['dedent_token'] = layout['dedent_token']
+        profile['tab_size'] = layout.get('tab_size', 4)
+        body['layout'] = profile
         return body
 
     # * method: exists

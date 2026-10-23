@@ -15,6 +15,7 @@ from tiferet.interfaces import Service
 from tiferet.repos.core import ConfigurationRepository
 
 # ** app
+from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.interfaces import grammar as grammar_interface
 from tiferet_ly.interfaces.grammar import GrammarService
 from tiferet_ly.mappers.grammar import (
@@ -34,8 +35,27 @@ _FORBIDDEN_BODY_KEYS = (
     'subgrammar',
     'precedence',
     'associativity',
-    'layout',
 )
+
+# ** constant: full_layout
+_FULL_LAYOUT = {
+    'block_tokens': ['IF', 'FOR', 'DEF'],
+    'open_delimiters': ['LPAREN'],
+    'close_delimiters': ['RPAREN'],
+    'newline_token': 'NEWLINE',
+    'suppress_newline_in_delimiters': True,
+    'indent_token': 'INDENT',
+    'dedent_token': 'DEDENT',
+    'tab_size': 4,
+}
+
+# ** constant: non_default_layout
+_NON_DEFAULT_LAYOUT = {
+    'suppress_newline_in_delimiters': False,
+    'indent_token': 'INDENT',
+    'dedent_token': 'DEDENT',
+    'tab_size': 8,
+}
 
 # *** functions
 
@@ -43,7 +63,9 @@ _FORBIDDEN_BODY_KEYS = (
 def _grammar(id: str,
              parent_ids: list[str],
              start: str,
-             ignore: str | None = None) -> GrammarAggregate:
+             ignore: str | None = None,
+             *,
+             layout: dict | None = None) -> GrammarAggregate:
     '''
     Build a grammar aggregate through the consumed config object.
 
@@ -55,6 +77,8 @@ def _grammar(id: str,
     :type start: str
     :param ignore: The optional ignore pattern. None omits the key.
     :type ignore: str | None
+    :param layout: The optional layout mapping. None omits the key.
+    :type layout: dict | None
     :return: The mapped grammar aggregate.
     :rtype: GrammarAggregate
     '''
@@ -67,6 +91,10 @@ def _grammar(id: str,
     }
     if ignore is not None:
         payload['ignore'] = ignore
+
+    # Omit layout when it is None. A dict is passed through.
+    if layout is not None:
+        payload['layout'] = layout
 
     # Tests construct aggregates only through model_validate().map().
     return GrammarConfigObject.model_validate(payload).map()
@@ -129,6 +157,59 @@ def _seeded_grammars() -> dict:
                 'start': 'expression',
             },
         },
+    }
+
+# ** function: neighbour_document
+def _neighbour_document() -> dict:
+    '''
+    Return the token and production document that grammar saves must leave alone.
+
+    :return: A document with tokens, production rules, and an empty grammars mapping.
+    :rtype: dict
+    '''
+
+    # Match the neighbouring roots seeded by test_save_leaves_other_roots.
+    return {
+        'tokens': [
+            {
+                'PLUS': {
+                    'grammar_id': 'arithmetic',
+                    'pattern': 'plus',
+                },
+            },
+        ],
+        'production_rules': [
+            {
+                'expression': {
+                    'grammar_id': 'arithmetic',
+                    'spec': 'expression : term',
+                },
+            },
+        ],
+        'grammars': {},
+    }
+
+# ** function: layout_attributes
+def _layout_attributes(layout: LayoutProfile) -> dict:
+    '''
+    Read the eight layout profile attributes into a plain mapping.
+
+    :param layout: The reloaded layout profile.
+    :type layout: LayoutProfile
+    :return: The attribute values, keyed by field name.
+    :rtype: dict
+    '''
+
+    # Compare attributes, not a dict identity.
+    return {
+        'block_tokens': layout.block_tokens,
+        'open_delimiters': layout.open_delimiters,
+        'close_delimiters': layout.close_delimiters,
+        'newline_token': layout.newline_token,
+        'suppress_newline_in_delimiters': layout.suppress_newline_in_delimiters,
+        'indent_token': layout.indent_token,
+        'dedent_token': layout.dedent_token,
+        'tab_size': layout.tab_size,
     }
 
 # *** fixtures
@@ -457,6 +538,7 @@ class TestGrammarConfigRepository:
             assert 'id' not in body
             for key in _FORBIDDEN_BODY_KEYS:
                 assert key not in body
+            assert 'layout' not in body
 
         # Reloaded parents keep the saved sequence.
         repo = test_ctx.make_target(config_file=str(path))
@@ -620,6 +702,7 @@ class TestGrammarConfigRepository:
         }
         for key in _FORBIDDEN_BODY_KEYS:
             assert key not in parsed['grammars']['arithmetic']
+        assert 'layout' not in parsed['grammars']['arithmetic']
 
     # * test: declared_ignore_round_trip
     def test_declared_ignore_round_trip(self, test_ctx, session, write_yaml):
@@ -657,6 +740,7 @@ class TestGrammarConfigRepository:
             assert 'id' not in body
             for key in _FORBIDDEN_BODY_KEYS:
                 assert key not in body
+            assert 'layout' not in body
             assert repo.get(grammar_id).ignore == ignore
 
         # Saving space again without ignore removes the key and reloads None.
@@ -769,7 +853,7 @@ class TestGrammarConfigRepository:
     # * test: save_omits_layout
     def test_save_omits_layout(self, test_ctx, session, write_yaml):
         '''
-        Leave a seeded layout key on read, drop it on save, and keep it on other keys.
+        Leave a seeded layout key on read, replace it with a layout-less save, and keep it on other keys.
 
         :param test_ctx: The bound repository tester context.
         :type test_ctx: RepoTesterContext
@@ -821,3 +905,276 @@ class TestGrammarConfigRepository:
         # The key that was not saved keeps its layout and gains no ignore.
         assert bodies['kept']['layout'] == layout
         assert 'ignore' not in bodies['kept']
+
+    # * test: save_layout_profile
+    def test_save_layout_profile(self, test_ctx, session, write_yaml):
+        '''
+        Write a declared layout profile as the last body key and reload it.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Save a plain grammar and an indented one beside the neighbouring roots.
+        document = _neighbour_document()
+        path = write_yaml(document)
+        repo = test_ctx.make_target(config_file=str(path))
+        repo.save(_grammar('plain', [], 'expression'))
+        repo = test_ctx.make_target(config_file=str(path))
+        repo.save(_grammar('indented', [], 'expression', layout=dict(_FULL_LAYOUT)))
+
+        # The indented body is the plain body plus layout, last, in the declared order.
+        parsed = _parsed(path)
+        bodies = parsed['grammars']
+        assert list(bodies['indented']) == [*list(bodies['plain']), 'layout']
+        indented_without_layout = {key: value for key, value in bodies['indented'].items() if key != 'layout'}
+        assert indented_without_layout == bodies['plain']
+        assert bodies['indented']['layout'] == _FULL_LAYOUT
+        assert list(bodies['indented']['layout']) == list(_FULL_LAYOUT)
+        assert 'id' not in bodies['indented']
+        for key in _FORBIDDEN_BODY_KEYS:
+            assert key not in bodies['indented']
+        assert parsed['tokens'] == document['tokens']
+        assert parsed['production_rules'] == document['production_rules']
+
+        # A new repository reloads the full profile, lists in declared order.
+        repo = test_ctx.make_target(config_file=str(path))
+        reloaded = repo.get('indented')
+        assert isinstance(reloaded.layout, LayoutProfile)
+        assert _layout_attributes(reloaded.layout) == _FULL_LAYOUT
+        listed = {item.id: item for item in repo.list()}
+        assert _layout_attributes(listed['indented'].layout) == _layout_attributes(reloaded.layout)
+
+        # On a second file, a non-default profile keeps False and 8 and omits newline_token.
+        path = write_yaml({}, name='columns.yml')
+        repo = test_ctx.make_target(config_file=str(path))
+        repo.save(_grammar('columns', [], 'expression', layout=dict(_NON_DEFAULT_LAYOUT)))
+        written = _parsed(path)['grammars']['columns']['layout']
+        assert written == {
+            'block_tokens': [],
+            'open_delimiters': [],
+            'close_delimiters': [],
+            'suppress_newline_in_delimiters': False,
+            'indent_token': 'INDENT',
+            'dedent_token': 'DEDENT',
+            'tab_size': 8,
+        }
+        assert list(written) == [
+            'block_tokens',
+            'open_delimiters',
+            'close_delimiters',
+            'suppress_newline_in_delimiters',
+            'indent_token',
+            'dedent_token',
+            'tab_size',
+        ]
+        # ++ todo: Revisit this redundant newline_token absence check (already covered by the equality above) when YAML-based testing arrives with the tiferet 2.2 config-based tester.
+        assert 'newline_token' not in written
+
+        # The non-default profile reloads with its own values.
+        columns = test_ctx.make_target(config_file=str(path)).get('columns').layout
+        assert columns.suppress_newline_in_delimiters is False
+        assert columns.tab_size == 8
+        assert columns.block_tokens == []
+        assert columns.open_delimiters == []
+        assert columns.close_delimiters == []
+        assert columns.newline_token is None
+        assert columns.indent_token == 'INDENT'
+        assert columns.dedent_token == 'DEDENT'
+
+    # * test: absent_layout_reloads_as_none
+    def test_absent_layout_reloads_as_none(self, test_ctx, session, write_yaml):
+        '''
+        Reload a missing or null layout as None without writing the file.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Seed three bodies on separate files. Do not save before reading.
+        seeds = {
+            'missing.yml': {
+                'parent_ids': [],
+                'start': 'expression',
+            },
+            'ignore.yml': {
+                'parent_ids': [],
+                'start': 'expression',
+                'ignore': ' \t',
+            },
+            'null.yml': {
+                'parent_ids': [],
+                'start': 'expression',
+                'layout': None,
+            },
+        }
+        for name, body in seeds.items():
+            path = write_yaml({'grammars': {'arithmetic': body}}, name=name)
+            before = path.read_bytes()
+            repo = test_ctx.make_target(config_file=str(path))
+
+            # Each read maps no profile and leaves the bytes unchanged.
+            assert repo.exists('arithmetic') is True
+            grammar = repo.get('arithmetic')
+            assert grammar is not None
+            assert grammar.layout is None
+            assert [item.layout for item in repo.list()] == [None]
+            assert path.read_bytes() == before
+
+            # The ignore seed keeps its space-then-tab string.
+            if 'ignore' in body:
+                assert grammar.ignore == ' \t'
+
+    # * test: partial_layout_reloads_defaults
+    def test_partial_layout_reloads_defaults(self, test_ctx, session, write_yaml):
+        '''
+        Reload a stored layout of only the required names with the mapper defaults.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Seed the partial mapping. Do not save first.
+        path = write_yaml({
+            'grammars': {
+                'indented': {
+                    'parent_ids': [],
+                    'start': 'expression',
+                    'layout': {
+                        'indent_token': 'INDENT',
+                        'dedent_token': 'DEDENT',
+                    },
+                },
+            },
+        })
+        repo = test_ctx.make_target(config_file=str(path))
+
+        # The mapper, not the repository, fills the defaults.
+        layout = repo.get('indented').layout
+        assert isinstance(layout, LayoutProfile)
+        assert layout.block_tokens == []
+        assert layout.open_delimiters == []
+        assert layout.close_delimiters == []
+        assert layout.newline_token is None
+        assert layout.suppress_newline_in_delimiters is True
+        assert layout.indent_token == 'INDENT'
+        assert layout.dedent_token == 'DEDENT'
+        assert layout.tab_size == 4
+
+    # * test: layout_does_not_follow_parent_ids
+    def test_layout_does_not_follow_parent_ids(self, test_ctx, session, write_yaml):
+        '''
+        Save and reload a child grammar without taking its parent's profile.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Save a parent with a profile, then a child that names it.
+        path = write_yaml({})
+        repo = test_ctx.make_target(config_file=str(path))
+        repo.save(_grammar('arithmetic', [], 'expression', layout=dict(_FULL_LAYOUT)))
+        repo = test_ctx.make_target(config_file=str(path))
+        repo.save(_grammar('arithmetic_with_names', ['arithmetic', 'names'], 'expression'))
+
+        # Only the parent body carries layout.
+        bodies = _parsed(path)['grammars']
+        assert bodies['arithmetic']['layout'] == _FULL_LAYOUT
+        assert 'layout' not in bodies['arithmetic_with_names']
+
+        # A new repository does not fill the child from its parent.
+        repo = test_ctx.make_target(config_file=str(path))
+        child = repo.get('arithmetic_with_names')
+        assert child.parent_ids == ['arithmetic', 'names']
+        assert child.layout is None
+        assert repo.get('arithmetic').layout.indent_token == 'INDENT'
+
+    # * test: replace_clears_layout_and_keeps_ignore
+    def test_replace_clears_layout_and_keeps_ignore(self, test_ctx, session, write_yaml):
+        '''
+        Remove layout on a layout-less replace and keep each grammar's ignore.
+
+        :param test_ctx: The bound repository tester context.
+        :type test_ctx: RepoTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        :param write_yaml: Writer for a temporary YAML file.
+        :type write_yaml: Callable
+        '''
+
+        # Seed one grammar with ignore and one with ignore and a partial layout.
+        path = write_yaml({
+            'grammars': {
+                'kept': {
+                    'parent_ids': [],
+                    'start': 'expression',
+                    'ignore': ' \t',
+                },
+                'both': {
+                    'parent_ids': [],
+                    'start': 'expression',
+                    'ignore': ' \t',
+                    'layout': {
+                        'indent_token': 'INDENT',
+                        'dedent_token': 'DEDENT',
+                    },
+                },
+            },
+        })
+
+        # Save a profiled grammar, then save the two seeded grammars as read.
+        repo = test_ctx.make_target(config_file=str(path))
+        repo.save(_grammar('arithmetic', [], 'expression', layout=dict(_FULL_LAYOUT)))
+        repo = test_ctx.make_target(config_file=str(path))
+        repo.save(repo.get('kept'))
+        repo.save(repo.get('both'))
+
+        # Replace the profiled grammar with one that has no layout.
+        repo.save(_grammar('arithmetic', ['names'], 'term'))
+
+        # The replaced body loses layout; the other bodies keep ignore.
+        parsed = _parsed(path)
+        bodies = parsed['grammars']
+        assert 'layout' not in bodies['arithmetic']
+        assert bodies['arithmetic']['parent_ids'] == ['names']
+        assert bodies['arithmetic']['start'] == 'term'
+        assert bodies['kept']['ignore'] == ' \t'
+        assert 'layout' not in bodies['kept']
+        assert list(bodies['both']) == ['parent_ids', 'start', 'ignore', 'layout']
+        assert bodies['both']['ignore'] == ' \t'
+        assert bodies['both']['layout'] == {
+            'block_tokens': [],
+            'open_delimiters': [],
+            'close_delimiters': [],
+            'suppress_newline_in_delimiters': True,
+            'indent_token': 'INDENT',
+            'dedent_token': 'DEDENT',
+            'tab_size': 4,
+        }
+        assert 'newline_token' not in bodies['both']['layout']
+        # ++ todo: Revisit this redundant length-and-set check (len is implied by the set equality) when YAML-based testing arrives with the tiferet 2.2 config-based tester.
+        assert len(parsed['grammars']) == 3
+        assert set(parsed['grammars']) == {'arithmetic', 'kept', 'both'}
+
+        # A new repository reloads the same facts.
+        repo = test_ctx.make_target(config_file=str(path))
+        assert repo.get('arithmetic').layout is None
+        assert repo.get('kept').layout is None
+        assert repo.get('both').ignore == ' \t'
+        assert repo.get('both').layout.indent_token == 'INDENT'
