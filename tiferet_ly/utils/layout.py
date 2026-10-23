@@ -77,13 +77,15 @@ def should_suppress_newline(lexeme_type: str, paren_depth: int, profile) -> bool
     :rtype: bool
     '''
 
-    # All four conditions must hold. No other type is ever dropped.
-    return bool(
-        profile.suppress_newline_in_delimiters
-        and profile.newline_token is not None
-        and lexeme_type == profile.newline_token
-        and paren_depth > 0
-    )
+    # A newline is dropped only inside an open delimiter, and only when asked.
+    if not profile.suppress_newline_in_delimiters or paren_depth <= 0:
+        return False
+
+    # Only the newline this profile named is eligible. An unnamed token never matches.
+    if lexeme_type != profile.newline_token:
+        return False
+
+    return True
 
 # ** function: flush_trailing_dedents
 def flush_trailing_dedents(current_col: int, profile, lexemes: list[LexemeAggregate]) -> list[LexemeAggregate]:
