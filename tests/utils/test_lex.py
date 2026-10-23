@@ -5,6 +5,7 @@
 # ** core
 import ast
 from pathlib import Path
+from typing import Callable
 from unittest.mock import patch
 
 # ** infra
@@ -153,6 +154,28 @@ def _layout_profile(indent_token: str = 'INDENT', dedent_token: str = 'DEDENT') 
         dedent_token=dedent_token,
         tab_size=4,
     )
+
+# ** function: recording_apply
+def _recording_apply(returned: list) -> Callable:
+    '''
+    Wrap the real LayoutFilter.apply so each list it returns is recorded.
+
+    :param returned: The list that receives each value apply returns, in call order.
+    :type returned: list
+    :return: A callable with the apply signature, for use as a patch wraps target.
+    :rtype: Callable
+    '''
+
+    # Capture the real filter now, before a patch replaces the class attribute.
+    real_apply = LayoutFilter.apply
+
+    # Record each returned list, then hand back that same object.
+    def record(*args):
+        returned.append(real_apply(*args))
+        return returned[-1]
+
+    # Return the wrapper for patch to call in place of apply.
+    return record
 
 # *** tests
 
@@ -493,20 +516,21 @@ class TestPlyLexer:
         expr.layout = _layout_profile()
 
         # Wrap the filter so the call and its returned list are both observed.
-        real_apply = LayoutFilter.apply
         returned = []
-
-        def recording_apply(*args):
-            returned.append(real_apply(*args))
-            return returned[-1]
-
+        recording_apply = _recording_apply(returned)
         with patch('tiferet_ly.utils.lex.LayoutFilter.apply', wraps=recording_apply) as apply:
             result = PlyLexer().tokenize('expr', _LAYOUT_TEXT, _layout_tokens(), [], [base, expr])
 
         # The filter is called once with the recognized list, the target profile, and the text.
         assert apply.call_count == 1
         lexemes, profile, text = apply.call_args.args
-        assert [lexeme.type for lexeme in lexemes] == ['BLOCK', 'IDENTIFIER', 'COLON', 'NEWLINE', 'IDENTIFIER']
+        assert [lexeme.type for lexeme in lexemes] == [
+            'BLOCK',
+            'IDENTIFIER',
+            'COLON',
+            'NEWLINE',
+            'IDENTIFIER',
+        ]
         assert [lexeme.value for lexeme in lexemes] == ['@', 'x', ':', '\n', 'y']
         assert profile is expr.layout
         assert text == _LAYOUT_TEXT
@@ -594,13 +618,8 @@ class TestPlyLexer:
         ]
 
         # Wrap the filter so the call and its returned list are both observed.
-        real_apply = LayoutFilter.apply
         returned = []
-
-        def recording_apply(*args):
-            returned.append(real_apply(*args))
-            return returned[-1]
-
+        recording_apply = _recording_apply(returned)
         with patch('tiferet_ly.utils.lex.LayoutFilter.apply', wraps=recording_apply) as apply:
             result = PlyLexer().tokenize('expr', '', tokens, [], [expr])
 
