@@ -2,10 +2,11 @@
 
 # *** imports
 
+# ** core
+from typing import Any
+
 # ** infra
 from pydantic import Field
-
-# ** app
 from tiferet.domain.core import DomainObject
 
 # *** models
@@ -15,8 +16,9 @@ class Lexeme(DomainObject):
     '''
     A recognized word and the source span where it was read.
 
-    The value is structural. Later AST work can reuse the same type,
-    text, line, and position without depending on a reader token.
+    The span is structural. Later work can reuse the same type, payload,
+    line, and position without depending on a reader token. A recognized
+    text token still carries its matched text. An absent payload is valid.
     '''
 
     # * attribute: type
@@ -26,9 +28,9 @@ class Lexeme(DomainObject):
     )
 
     # * attribute: value
-    value: str = Field(
-        ...,
-        description='The matched text of the recognized word.',
+    value: Any | None = Field(
+        default=None,
+        description='The matched text, a payload a token action assigned, or none when the span carries no payload.',
     )
 
     # * attribute: lineno
