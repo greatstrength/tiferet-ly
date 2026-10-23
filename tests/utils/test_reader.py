@@ -57,7 +57,6 @@ def grammar(id: str = 'arith', start: str = 'expr', parent_ids=None) -> GrammarA
     # Construct a lean grammar.
     return GrammarAggregate(id=id, parent_ids=list(parent_ids or []), start=start)
 
-
 # ** function: number_token
 def number_token(grammar_id: str = 'arith') -> ComplexTokenRuleAggregate:
     '''
@@ -77,7 +76,6 @@ def number_token(grammar_id: str = 'arith') -> ComplexTokenRuleAggregate:
         action='t.value = int(t.value)\nreturn t',
     )
 
-
 # ** function: plus_token
 def plus_token(grammar_id: str = 'arith') -> SimpleTokenRuleAggregate:
     '''
@@ -95,7 +93,6 @@ def plus_token(grammar_id: str = 'arith') -> SimpleTokenRuleAggregate:
         grammar_id=grammar_id,
         pattern=r'\+',
     )
-
 
 # ** function: ignore_token
 def ignore_token(grammar_id: str = 'arith') -> ComplexTokenRuleAggregate:
@@ -115,7 +112,6 @@ def ignore_token(grammar_id: str = 'arith') -> ComplexTokenRuleAggregate:
         pattern=r'\s+',
         action='return None',
     )
-
 
 # ** function: arith_productions
 def arith_productions(grammar_id: str = 'arith') -> list:
@@ -148,7 +144,6 @@ def arith_productions(grammar_id: str = 'arith') -> list:
         ),
     ]
 
-
 # *** tests
 
 # ** test: unique_production_attr_suffixes_repeats
@@ -165,7 +160,6 @@ def test_unique_production_attr_suffixes_repeats() -> None:
     # Assert the first keeps the bare name and the second is suffixed.
     assert first == 'p_expr'
     assert second == 'p_expr_2'
-
 
 # ** test: tokenize_returns_lexeme_aggregates
 def test_tokenize_returns_lexeme_aggregates() -> None:
@@ -188,7 +182,6 @@ def test_tokenize_returns_lexeme_aggregates() -> None:
     assert result[0].value == 42
     assert result[0].lineno == 1
     assert result[0].lexpos == 0
-
 
 # ** test: build_lexer_module_skips_synthetic_installation
 def test_build_lexer_module_skips_synthetic_installation() -> None:
@@ -215,7 +208,6 @@ def test_build_lexer_module_skips_synthetic_installation() -> None:
     # Assert the name is present in declared position with no installed attribute.
     assert module.tokens == ['NUMBER', 'INDENT']
     assert not hasattr(module, 't_INDENT')
-
 
 # ** test: tokenize_applies_declared_layout_profile
 def test_tokenize_applies_declared_layout_profile() -> None:
@@ -261,7 +253,6 @@ def test_tokenize_applies_declared_layout_profile() -> None:
     assert [lexeme.type for lexeme in result] == [
         'BLOCK', 'IDENTIFIER', 'COLON', 'NEWLINE', 'INDENT', 'IDENTIFIER', 'DEDENT',
     ]
-
 
 # ** test: tokenize_without_layout_is_unaffected
 def test_tokenize_without_layout_is_unaffected() -> None:
@@ -324,7 +315,6 @@ def test_tokenize_passes_declared_layout_through_unwrapped(monkeypatch) -> None:
     assert len(received) == 1
     assert received[0] is target.layout
 
-
 # ** test: tokenize_with_synthetic_rule_present_still_lexes
 def test_tokenize_with_synthetic_rule_present_still_lexes() -> None:
     '''
@@ -342,7 +332,6 @@ def test_tokenize_with_synthetic_rule_present_still_lexes() -> None:
 
     # Assert only the real NUMBER lexeme was produced.
     assert [lexeme.type for lexeme in result] == ['NUMBER']
-
 
 # ** test: build_lexer_module_sets_t_ignore_when_declared
 def test_build_lexer_module_sets_t_ignore_when_declared() -> None:
@@ -366,7 +355,6 @@ def test_build_lexer_module_sets_t_ignore_when_declared() -> None:
     # Assert t_ignore is set to the exact declared pattern.
     assert module.t_ignore == ' \t'
 
-
 # ** test: build_lexer_module_omits_t_ignore_when_unset
 def test_build_lexer_module_omits_t_ignore_when_unset() -> None:
     '''
@@ -386,7 +374,6 @@ def test_build_lexer_module_omits_t_ignore_when_unset() -> None:
 
     # Assert no t_ignore attribute was installed.
     assert not hasattr(module, 't_ignore')
-
 
 # ** test: tokenize_honors_whitespace_override
 def test_tokenize_honors_whitespace_override() -> None:
@@ -424,7 +411,6 @@ def test_tokenize_honors_whitespace_override() -> None:
     # Assert both numbers are recognized and the comment is dropped.
     assert [lexeme.value for lexeme in result] == [1, 2]
 
-
 # ** test: tokenize_unknown_grammar_does_not_call_lex
 def test_tokenize_unknown_grammar_does_not_call_lex(monkeypatch) -> None:
     '''
@@ -448,7 +434,6 @@ def test_tokenize_unknown_grammar_does_not_call_lex(monkeypatch) -> None:
     assert raised.value.error_code == GRAMMAR_NOT_FOUND_ID
     assert called['lex'] is False
 
-
 # ** test: tokenize_illegal_character_raises_lex_error
 def test_tokenize_illegal_character_raises_lex_error() -> None:
     '''
@@ -465,7 +450,6 @@ def test_tokenize_illegal_character_raises_lex_error() -> None:
     assert raised.value.kwargs['value'] == 'x'
     assert raised.value.kwargs['lineno'] == 1
     assert 'lexpos' in raised.value.kwargs
-
 
 # ** test: parse_two_alternatives
 def test_parse_two_alternatives() -> None:
@@ -484,7 +468,6 @@ def test_parse_two_alternatives() -> None:
 
     # Assert the start action produced the sum.
     assert result == 3
-
 
 # ** test: parse_preserves_token_order
 def test_parse_preserves_token_order() -> None:
@@ -527,7 +510,6 @@ def test_parse_preserves_token_order() -> None:
     # Assert both identifiers were recognized in source order.
     assert result == ('a', 'b')
 
-
 # ** test: parse_does_not_write_tables
 def test_parse_does_not_write_tables(tmp_path, monkeypatch) -> None:
     '''
@@ -548,7 +530,6 @@ def test_parse_does_not_write_tables(tmp_path, monkeypatch) -> None:
     names = {path.name for path in tmp_path.iterdir()}
     assert 'parsetab.py' not in names
     assert 'lextab.py' not in names
-
 
 # ** test: parse_unknown_grammar_does_not_call_yacc
 def test_parse_unknown_grammar_does_not_call_yacc(monkeypatch) -> None:
@@ -578,7 +559,6 @@ def test_parse_unknown_grammar_does_not_call_yacc(monkeypatch) -> None:
     # Assert GRAMMAR_NOT_FOUND and that ply was not invoked.
     assert raised.value.error_code == GRAMMAR_NOT_FOUND_ID
     assert called['yacc'] is False
-
 
 # ** test: parse_syntax_error_raises
 def test_parse_syntax_error_raises() -> None:
@@ -827,7 +807,6 @@ def test_parse_build_failure_raises() -> None:
     assert raised.value.error_code == READER_BUILD_FAILED_ID
     assert raised.value.kwargs['grammar_id'] == 'arith'
 
-
 # ** test: tokenize_action_failure_raises
 def test_tokenize_action_failure_raises() -> None:
     '''
@@ -852,7 +831,6 @@ def test_tokenize_action_failure_raises() -> None:
     assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
     assert raised.value.kwargs['grammar_id'] == 'arith'
 
-
 # ** test: ply_import_is_isolated
 def test_ply_import_is_isolated() -> None:
     '''
@@ -872,7 +850,6 @@ def test_ply_import_is_isolated() -> None:
     assert 'ply' not in parse_events.__dict__
     assert 'ply' not in render_events.__dict__
     assert 'ply' not in render_util.__dict__
-
 
 # ** test: features_lex_and_parse_arithmetic
 def test_features_lex_and_parse_arithmetic(tmp_path, monkeypatch) -> None:
@@ -999,7 +976,6 @@ def test_features_lex_and_parse_arithmetic(tmp_path, monkeypatch) -> None:
     assert flagged_off == 3
     assert flagged_on == '3'
     assert isinstance(flagged_on, str)
-
 
 # ** test: parse_feature_renders_ast_node_aggregate
 def test_parse_feature_renders_ast_node_aggregate(tmp_path, monkeypatch) -> None:
