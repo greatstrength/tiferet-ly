@@ -168,7 +168,6 @@ def token_service(tokens=None) -> Mock:
     service.list.return_value = list(tokens or [])
     return service
 
-
 # ** function: layout_profile
 def layout_profile(indent_token: str = 'INDENT', tab_size: int = 4) -> LayoutProfile:
     '''
@@ -189,7 +188,6 @@ def layout_profile(indent_token: str = 'INDENT', tab_size: int = 4) -> LayoutPro
         dedent_token='DEDENT',
         tab_size=tab_size,
     )
-
 
 # *** fixtures
 
@@ -608,7 +606,6 @@ def test_shrinking_writers_import_grammar_rule_selector() -> None:
     assert production_events.GrammarRuleSelector is GrammarRuleSelector
     assert grammar_events.GrammarRuleSelector is GrammarRuleSelector
 
-
 # ** test: add_grammar_saves_both_facts
 def test_add_grammar_saves_both_facts() -> None:
     '''
@@ -635,7 +632,6 @@ def test_add_grammar_saves_both_facts() -> None:
     assert result.ignore == ' \t'
     assert result.layout == profile
     grammars.save.assert_called_once_with(result)
-
 
 # ** test: add_grammar_without_facts_saves_none
 @pytest.mark.parametrize('facts', [
@@ -666,7 +662,6 @@ def test_add_grammar_without_facts_saves_none(facts) -> None:
     assert result.layout is None
     grammars.save.assert_called_once_with(result)
 
-
 # ** test: add_grammar_empty_ignore_is_set
 def test_add_grammar_empty_ignore_is_set() -> None:
     '''
@@ -689,7 +684,6 @@ def test_add_grammar_empty_ignore_is_set() -> None:
     # Assert the empty string survives.
     assert result.ignore == ''
     grammars.save.assert_called_once()
-
 
 # ** test: add_grammar_failed_checks_with_facts_do_not_save
 @pytest.mark.parametrize('catalogue, productions, id, parent_ids, error_code', [
@@ -728,7 +722,6 @@ def test_add_grammar_failed_checks_with_facts_do_not_save(
     assert raised.value.error_code == error_code
     grammars.save.assert_not_called()
 
-
 # ** test: add_grammar_rejected_fact_does_not_save
 @pytest.mark.parametrize('facts', [
     {'ignore': 5},
@@ -758,7 +751,6 @@ def test_add_grammar_rejected_fact_does_not_save(facts) -> None:
 
     # Assert nothing was saved.
     grammars.save.assert_not_called()
-
 
 # ** test: set_grammar_ignore_sets_exact_string
 @pytest.mark.parametrize('ignore', [' \t', '[ \t]'])
@@ -792,7 +784,6 @@ def test_set_grammar_ignore_sets_exact_string(ignore) -> None:
     assert result.parent_ids == ['arithmetic']
     grammars.save.assert_called_once_with(result)
 
-
 # ** test: set_grammar_ignore_none_clears
 def test_set_grammar_ignore_none_clears() -> None:
     '''
@@ -816,7 +807,6 @@ def test_set_grammar_ignore_none_clears() -> None:
     assert result.layout == profile
     grammars.save.assert_called_once_with(result)
 
-
 # ** test: set_grammar_ignore_rejects_non_string
 def test_set_grammar_ignore_rejects_non_string() -> None:
     '''
@@ -835,7 +825,6 @@ def test_set_grammar_ignore_rejects_non_string() -> None:
 
     # Assert nothing was saved.
     grammars.save.assert_not_called()
-
 
 # ** test: set_grammar_layout_sets_or_clears
 def test_set_grammar_layout_sets_or_clears() -> None:
@@ -872,7 +861,6 @@ def test_set_grammar_layout_sets_or_clears() -> None:
     assert result.ignore == ' \t'
     assert grammars.save.call_count == 2
 
-
 # ** test: set_grammar_layout_rejected_profile_does_not_save
 @pytest.mark.parametrize('tab_size', [0, -1, False])
 def test_set_grammar_layout_rejected_profile_does_not_save(tab_size) -> None:
@@ -897,7 +885,6 @@ def test_set_grammar_layout_rejected_profile_does_not_save(tab_size) -> None:
 
     # Assert nothing was saved.
     grammars.save.assert_not_called()
-
 
 # ** test: fact_writers_require_fact_keyword
 @pytest.mark.parametrize('event_cls, keyword', [
@@ -924,7 +911,6 @@ def test_fact_writers_require_fact_keyword(event_cls, keyword) -> None:
     assert raised.value.kwargs['parameters'] == [keyword]
     grammars.save.assert_not_called()
 
-
 # ** test: fact_writers_require_only_id_through_decorator
 @pytest.mark.parametrize('event_cls, keyword', [
     (SetGrammarIgnore, 'ignore'),
@@ -950,7 +936,6 @@ def test_fact_writers_require_only_id_through_decorator(event_cls, keyword) -> N
     assert raised.value.error_code == tiferet_a.error.COMMAND_PARAMETER_REQUIRED_ID
     assert raised.value.kwargs['parameters'] == ['id']
     grammars.save.assert_not_called()
-
 
 # ** test: fact_writers_need_only_grammar_service
 @pytest.mark.parametrize('event_cls, facts', [
@@ -986,7 +971,6 @@ def test_fact_writers_need_only_grammar_service(event_cls, facts) -> None:
     grammars.list.assert_not_called()
     grammars.exists.assert_not_called()
     grammars.save.assert_called_once()
-
 
 # ** test_int: fact_writes_round_trip_through_repository
 def test_int_fact_writes_round_trip_through_repository(
@@ -1050,7 +1034,6 @@ def test_int_fact_writes_round_trip_through_repository(
     assert loaded.ignore is None
     assert loaded.layout is None
 
-
 # ** test_int: fact_writes_are_not_inherited
 def test_int_fact_writes_are_not_inherited(
         grammar_repo: GrammarConfigRepository) -> None:
@@ -1104,7 +1087,6 @@ def test_int_fact_writes_are_not_inherited(
     parent = grammar_repo.get('arithmetic')
     assert parent.ignore == ' \t'
     assert parent.layout.model_dump() == profile.model_dump()
-
 
 # ** test: fact_writers_do_not_consult_layout_filter
 def test_fact_writers_do_not_consult_layout_filter() -> None:

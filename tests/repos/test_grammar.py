@@ -111,7 +111,6 @@ def test_int_grammar_repo_serialized_yaml_shape(
         },
     }
 
-
 # ** test_int: grammar_repo_fact_round_trip
 def test_int_grammar_repo_fact_round_trip(
     grammar_repo: GrammarConfigRepository,

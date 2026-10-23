@@ -104,7 +104,6 @@ def test_grammar_aggregate_mutations() -> None:
     assert grammar.start == 'expression'
     assert grammar.parent_ids == ['base', 'extra']
 
-
 # ** test: grammar_aggregate_set_ignore_stores_exact_string
 @pytest.mark.parametrize('ignore', [' \t', '', '[ \t]', None])
 def test_grammar_aggregate_set_ignore_stores_exact_string(ignore) -> None:
@@ -133,7 +132,6 @@ def test_grammar_aggregate_set_ignore_stores_exact_string(ignore) -> None:
     assert grammar.start == 'module'
     assert grammar.parent_ids == ['base']
     assert grammar.layout == layout
-
 
 # ** test: grammar_aggregate_set_layout_replaces_or_clears
 def test_grammar_aggregate_set_layout_replaces_or_clears() -> None:
@@ -166,7 +164,6 @@ def test_grammar_aggregate_set_layout_replaces_or_clears() -> None:
     assert grammar.layout is None
     assert grammar.ignore == ' \t'
 
-
 # ** test: grammar_aggregate_set_ignore_rejects_non_string
 @pytest.mark.parametrize('ignore', [5, 1.5, True, [' ']])
 def test_grammar_aggregate_set_ignore_rejects_non_string(ignore) -> None:
@@ -182,7 +179,6 @@ def test_grammar_aggregate_set_ignore_rejects_non_string(ignore) -> None:
 
     # Assert the stored value is unchanged.
     assert grammar.ignore == ' '
-
 
 # ** test: grammar_aggregate_set_layout_rejects_non_positive_tab_size
 @pytest.mark.parametrize('tab_size', [0, -1, False])
@@ -202,7 +198,6 @@ def test_grammar_aggregate_set_layout_rejects_non_positive_tab_size(tab_size) ->
 
     # Assert no profile was stored.
     assert grammar.layout is None
-
 
 # ** test: grammar_config_object_to_data_excludes_only_id
 def test_grammar_config_object_to_data_excludes_only_id() -> None:
