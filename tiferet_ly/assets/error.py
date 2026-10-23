@@ -11,6 +11,9 @@ TOKEN_NOT_FOUND_ID = 'TOKEN_NOT_FOUND'
 # ** constant: token_action_not_supported_id
 TOKEN_ACTION_NOT_SUPPORTED_ID = 'TOKEN_ACTION_NOT_SUPPORTED'
 
+# ** constant: token_pattern_not_supported_id
+TOKEN_PATTERN_NOT_SUPPORTED_ID = 'TOKEN_PATTERN_NOT_SUPPORTED'
+
 # *** constants (ids_production)
 
 # ** constant: production_already_exists_id

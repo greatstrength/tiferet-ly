@@ -6,11 +6,14 @@
 from abc import abstractmethod
 from typing import List, Optional, Union
 
-# ** app
+# ** infra
 from tiferet import Service
+
+# ** app
 from ..mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 
 # *** interfaces
@@ -42,7 +45,7 @@ class TokenService(Service):
 
     # * method: get
     @abstractmethod
-    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]:
+    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]:
         '''
         Retrieve a token rule aggregate by name and grammar_id.
 
@@ -51,32 +54,32 @@ class TokenService(Service):
         :param grammar_id: The grammar the rule is declared under.
         :type grammar_id: str
         :return: The token rule aggregate, or None if not found.
-        :rtype: Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]
+        :rtype: Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]
         '''
         # Not implemented.
         raise NotImplementedError('get method is required for TokenService.')
 
     # * method: list
     @abstractmethod
-    def list(self) -> List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]:
+    def list(self) -> List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]:
         '''
         List every token rule aggregate unfiltered, in declared order.
 
         :return: All stored token rule aggregates.
-        :rtype: List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]
+        :rtype: List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]
         '''
         # Not implemented.
         raise NotImplementedError('list method is required for TokenService.')
 
     # * method: save
     @abstractmethod
-    def save(self, token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]) -> None:
+    def save(self, token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]) -> None:
         '''
         Persist a token rule aggregate, replacing an existing
         ``(name, grammar_id)`` entry in place or appending when absent.
 
         :param token: The token rule aggregate to persist.
-        :type token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :type token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         :return: None
         :rtype: None
         '''

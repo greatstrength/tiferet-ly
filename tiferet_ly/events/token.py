@@ -5,13 +5,16 @@
 # ** core
 from typing import List, Optional, Union
 
-# ** app
+# ** infra
 from tiferet.events.core import DomainEvent
+
+# ** app
 from .. import assets as a
 from ..interfaces.token import TokenService
 from ..mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 
 # *** events
@@ -44,7 +47,7 @@ class TokenEvent(DomainEvent):
     def _require_token(
             self,
             name: str,
-            grammar_id: str) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]:
+            grammar_id: str) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]:
         '''
         Load a token by composite key and verify it exists.
 
@@ -53,7 +56,7 @@ class TokenEvent(DomainEvent):
         :param grammar_id: The grammar the rule is declared under.
         :type grammar_id: str
         :return: The loaded token aggregate.
-        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         '''
 
         # Retrieve the token by composite key.
@@ -77,18 +80,20 @@ class AddToken(TokenEvent):
     '''
     Event to add a new token rule under a grammar.
 
-    Constructs a simple aggregate when ``action`` is omitted and a complex
-    aggregate when it is provided. The owning grammar need not exist yet.
+    Branches on presence in the configuration mapper's order: a present
+    ``action`` yields a complex aggregate; otherwise a present ``pattern``
+    yields a simple aggregate; neither present yields a synthetic
+    aggregate. Absence is ``None``. The owning grammar need not exist yet.
     '''
 
     # * method: execute
-    @DomainEvent.parameters_required(['name', 'grammar_id', 'pattern'])
+    @DomainEvent.parameters_required(['name', 'grammar_id'])
     def execute(self,
             name: str,
             grammar_id: str,
-            pattern: str,
+            pattern: Optional[str] = None,
             action: Optional[str] = None,
-            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]:
+            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]:
         '''
         Add a new token rule.
 
@@ -96,14 +101,14 @@ class AddToken(TokenEvent):
         :type name: str
         :param grammar_id: The grammar the rule is declared under.
         :type grammar_id: str
-        :param pattern: The regular expression pattern.
-        :type pattern: str
+        :param pattern: Optional regular expression pattern; None for a synthetic token.
+        :type pattern: Optional[str]
         :param action: Optional encoded action source for a complex token.
         :type action: Optional[str]
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: The created token aggregate.
-        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         '''
 
         # Verify the token name is unique within the grammar.
@@ -115,19 +120,29 @@ class AddToken(TokenEvent):
             grammar_id=grammar_id,
         )
 
-        # Construct the matching simple or complex aggregate.
-        if action is None:
-            token = SimpleTokenRuleAggregate(
-                name=name,
-                grammar_id=grammar_id,
-                pattern=pattern,
-            )
-        else:
+        # Construct the complex aggregate when an action is present; a
+        # missing pattern fails domain construction before save.
+        if action is not None:
             token = ComplexTokenRuleAggregate(
                 name=name,
                 grammar_id=grammar_id,
                 pattern=pattern,
                 action=action,
+            )
+
+        # Construct the simple aggregate when a pattern is present with no action.
+        elif pattern is not None:
+            token = SimpleTokenRuleAggregate(
+                name=name,
+                grammar_id=grammar_id,
+                pattern=pattern,
+            )
+
+        # Construct the synthetic aggregate when neither pattern nor action is present.
+        else:
+            token = SyntheticTokenRuleAggregate(
+                name=name,
+                grammar_id=grammar_id,
             )
 
         # Persist the new token.
@@ -148,7 +163,7 @@ class GetToken(TokenEvent):
     def execute(self,
             name: str,
             grammar_id: str,
-            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]:
+            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]:
         '''
         Retrieve a token rule by composite key.
 
@@ -159,7 +174,7 @@ class GetToken(TokenEvent):
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: The token aggregate.
-        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         '''
 
         # Load and return the token, raising when it is absent.
@@ -173,14 +188,14 @@ class ListTokens(TokenEvent):
     '''
 
     # * method: execute
-    def execute(self, **kwargs) -> List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]:
+    def execute(self, **kwargs) -> List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]:
         '''
         List every stored token rule.
 
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: All stored token aggregates.
-        :rtype: List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]
+        :rtype: List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]
         '''
 
         # Return the unfiltered catalogue.
@@ -199,7 +214,7 @@ class RenameToken(TokenEvent):
             name: str,
             grammar_id: str,
             new_name: str,
-            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]:
+            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]:
         '''
         Rename a token rule.
 
@@ -212,7 +227,7 @@ class RenameToken(TokenEvent):
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: The updated token aggregate.
-        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         '''
 
         # Load the token that will be renamed.
@@ -248,7 +263,7 @@ class ReassignTokenGrammar(TokenEvent):
             name: str,
             grammar_id: str,
             new_grammar_id: str,
-            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]:
+            **kwargs) -> Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]:
         '''
         Reassign a token rule to another grammar.
 
@@ -261,7 +276,7 @@ class ReassignTokenGrammar(TokenEvent):
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: The updated token aggregate.
-        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         '''
 
         # Load the token that will be reassigned.
@@ -289,6 +304,8 @@ class ReassignTokenGrammar(TokenEvent):
 class SetTokenPattern(TokenEvent):
     '''
     Event to replace a token rule's regular expression pattern.
+
+    Synthetic tokens cannot gain a pattern in place; that is a remove-and-add.
     '''
 
     # * method: execute
@@ -313,8 +330,17 @@ class SetTokenPattern(TokenEvent):
         :rtype: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
         '''
 
-        # Load the token, apply the pattern mutator, and persist.
+        # Load the token and verify it is not a synthetic token.
         token = self._require_token(name, grammar_id)
+        self.verify(
+            not isinstance(token, SyntheticTokenRuleAggregate),
+            a.error.TOKEN_PATTERN_NOT_SUPPORTED_ID,
+            message=f'Token pattern is not supported: {name} under {grammar_id}.',
+            name=name,
+            grammar_id=grammar_id,
+        )
+
+        # Apply the pattern mutator and persist.
         token.set_pattern(pattern)
         self.token_service.save(token)
 
