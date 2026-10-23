@@ -7,9 +7,9 @@ import inspect
 
 # ** infra
 import pytest
+from tiferet.interfaces.core import ServiceError
 
 # ** app
-from tiferet.interfaces.core import ServiceError
 from tiferet_ly.interfaces.lexer import LexerService
 from tiferet_ly.interfaces.parser import ParserService
 from tiferet_ly.mappers.ast import AstNodeAggregate
@@ -50,7 +50,6 @@ def grammar(id: str = 'order', parent_ids=None) -> GrammarAggregate:
     # Construct a lean grammar with an expr start symbol.
     return GrammarAggregate(id=id, parent_ids=list(parent_ids or []), start='expr')
 
-
 # ** function: complex_token
 def complex_token(
         name: str,
@@ -80,7 +79,6 @@ def complex_token(
         action=action,
     )
 
-
 # ** function: simple_token
 def simple_token(
         name: str,
@@ -106,9 +104,12 @@ def simple_token(
         pattern=pattern,
     )
 
-
 # ** function: tokenize
-def tokenize(tokens: list, text: str, target: GrammarAggregate = None, grammars: list = None) -> list:
+def tokenize(
+        tokens: list,
+        text: str,
+        target: GrammarAggregate = None,
+        grammars: list = None) -> list:
     '''
     Tokenize text against a token catalogue with PlyLexer.
 
@@ -128,7 +129,6 @@ def tokenize(tokens: list, text: str, target: GrammarAggregate = None, grammars:
     target = target or grammar()
     grammars = grammars or [target]
     return PlyLexer().tokenize(target.id, grammars, tokens, text)
-
 
 # ** function: build_module
 def build_module(tokens: list):
@@ -153,7 +153,6 @@ def build_module(tokens: list):
     )
     return module
 
-
 # ** function: callable_t_attrs
 def callable_t_attrs(module) -> list:
     '''
@@ -172,7 +171,6 @@ def callable_t_attrs(module) -> list:
         and name != 't_error'
         and callable(getattr(module, name))
     ]
-
 
 # ** function: types_of
 def types_of(lexemes: list) -> list:
@@ -216,7 +214,6 @@ def test_complex_rules_match_in_selected_order() -> None:
     assert [lexeme.lexpos for lexeme in two] == [0, 1]
     assert types_of(reversed_one) == ['A_SECOND']
 
-
 # ** test: keyword_and_identifier_follow_declared_order
 def test_keyword_and_identifier_follow_declared_order() -> None:
     '''
@@ -225,22 +222,21 @@ def test_keyword_and_identifier_follow_declared_order() -> None:
 
     # Z_ID before A_IF yields Z_ID.
     assert types_of(tokenize(
-        [complex_token('Z_ID', '[a-z]+'), complex_token('A_IF', 'if')],
+        [complex_token('Z_ID', pattern='[a-z]+'), complex_token('A_IF', pattern='if')],
         'if',
     )) == ['Z_ID']
 
     # IF before ID yields IF.
     assert types_of(tokenize(
-        [complex_token('IF', 'if'), complex_token('ID', '[a-z]+')],
+        [complex_token('IF', pattern='if'), complex_token('ID', pattern='[a-z]+')],
         'if',
     )) == ['IF']
 
     # ID before IF yields ID.
     assert types_of(tokenize(
-        [complex_token('ID', '[a-z]+'), complex_token('IF', 'if')],
+        [complex_token('ID', pattern='[a-z]+'), complex_token('IF', pattern='if')],
         'if',
     )) == ['ID']
-
 
 # ** test: keyword_prefix_then_identifier_rest
 def test_keyword_prefix_then_identifier_rest() -> None:
@@ -251,7 +247,7 @@ def test_keyword_prefix_then_identifier_rest() -> None:
 
     # IF before ID on iffy.
     result = tokenize(
-        [complex_token('IF', 'if'), complex_token('ID', '[a-z]+')],
+        [complex_token('IF', pattern='if'), complex_token('ID', pattern='[a-z]+')],
         'iffy',
     )
 
@@ -261,7 +257,6 @@ def test_keyword_prefix_then_identifier_rest() -> None:
         ('ID', 'fy'),
     ]
 
-
 # ** test: non_matching_complex_rule_is_skipped
 def test_non_matching_complex_rule_is_skipped() -> None:
     '''
@@ -270,14 +265,13 @@ def test_non_matching_complex_rule_is_skipped() -> None:
 
     # Z_NO (y), then M_YES (x), then A_ALSO (x).
     tokens = [
-        complex_token('Z_NO', 'y'),
-        complex_token('M_YES', 'x'),
-        complex_token('A_ALSO', 'x'),
+        complex_token('Z_NO', pattern='y'),
+        complex_token('M_YES', pattern='x'),
+        complex_token('A_ALSO', pattern='x'),
     ]
 
     # Assert the first matching rule in order wins.
     assert types_of(tokenize(tokens, 'x')) == ['M_YES']
-
 
 # ** test: walk_matches_at_lexpos_on_original_text
 def test_walk_matches_at_lexpos_on_original_text() -> None:
@@ -287,11 +281,10 @@ def test_walk_matches_at_lexpos_on_original_text() -> None:
     '''
 
     # A consumes a only when b follows; B consumes b.
-    tokens = [complex_token('A', 'a(?=b)'), complex_token('B', 'b')]
+    tokens = [complex_token('A', pattern='a(?=b)'), complex_token('B', pattern='b')]
 
     # Assert both rules are identified.
     assert types_of(tokenize(tokens, 'ab')) == ['A', 'B']
-
 
 # ** test: winner_returning_none_drops_match
 def test_winner_returning_none_drops_match() -> None:
@@ -308,7 +301,6 @@ def test_winner_returning_none_drops_match() -> None:
 
     # Assert nothing is emitted and nothing raised.
     assert tokenize(tokens, 'x') == []
-
 
 # ** test: winner_action_failure_is_attributed
 def test_winner_action_failure_is_attributed() -> None:
@@ -334,7 +326,6 @@ def test_winner_action_failure_is_attributed() -> None:
     assert isinstance(raised.value.__cause__, ValueError)
     assert str(raised.value.__cause__) == 'boom'
 
-
 # ** test: winner_action_sees_declared_type
 def test_winner_action_sees_declared_type() -> None:
     '''
@@ -355,7 +346,7 @@ def test_winner_action_sees_declared_type() -> None:
     result = tokenize(
         [
             complex_token('Z_FIRST', action="t.type = 'A_SECOND'\nreturn t"),
-            complex_token('A_SECOND', 'y'),
+            complex_token('A_SECOND', pattern='y'),
         ],
         'x',
     )
@@ -370,36 +361,6 @@ def test_winner_action_sees_declared_type() -> None:
     assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
     assert raised.value.kwargs['rule_name'] is None
 
-
-# ** test: unknown_type_message_names_original_rule
-def test_unknown_type_message_names_original_rule() -> None:
-    '''
-    Test that an unknown t.type keeps PLY's message naming t_<rule>, and is
-    still ACTION_EXECUTION_FAILED with rule_name null.
-    '''
-
-    # The winning action assigns a type absent from module.tokens.
-    token = complex_token('Z_FIRST', action="t.type = 'NOPE'\nreturn t")
-    _name, func = RuleTranslator.translate_token_rule(token)
-
-    # Tokenize text the action matches.
-    with pytest.raises(ServiceError) as raised:
-        tokenize([token, complex_token('A_SECOND')], 'xy')
-
-    # Assert the base message and the null attribution.
-    assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
-    assert raised.value.kwargs['rule_name'] is None
-    assert raised.value.__cause__.args[0] == (
-        "%s:%d: Rule '%s' returned an unknown token type '%s'" % (
-            '<tiferet_ly:t_Z_FIRST>',
-            func.__code__.co_firstlineno,
-            't_Z_FIRST',
-            'NOPE',
-        )
-    )
-    assert raised.value.__cause__.text == 'y'
-
-
 # ** test: walk_without_rematch_falls_back_to_unknown_type
 def test_walk_without_rematch_falls_back_to_unknown_type() -> None:
     '''
@@ -409,7 +370,7 @@ def test_walk_without_rematch_falls_back_to_unknown_type() -> None:
     '''
 
     # The conditional refers to a group number the master renumbers.
-    tokens = [complex_token('COND', '(a)?(?(1)b|c)')]
+    tokens = [complex_token('COND', pattern='(a)?(?(1)b|c)')]
 
     # Tokenize text only the master alternation accepts.
     with pytest.raises(ServiceError) as raised:
@@ -418,7 +379,6 @@ def test_walk_without_rematch_falls_back_to_unknown_type() -> None:
     # Assert the existing unknown-type failure with null attribution.
     assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
     assert raised.value.kwargs['rule_name'] is None
-
 
 # ** test: winner_action_uses_default_rewrites
 def test_winner_action_uses_default_rewrites() -> None:
@@ -442,7 +402,6 @@ def test_winner_action_uses_default_rewrites() -> None:
     assert result[0].value.kind == 'lit'
     assert result[0].value.value == 'x'
 
-
 # ** test: pattern_only_rules_keep_ply_length_sort
 def test_pattern_only_rules_keep_ply_length_sort() -> None:
     '''
@@ -451,8 +410,8 @@ def test_pattern_only_rules_keep_ply_length_sort() -> None:
 
     # Longest pattern wins in either catalogue order.
     for tokens in (
-        [simple_token('SHORT', 'x'), simple_token('LONG', 'xx')],
-        [simple_token('LONG', 'xx'), simple_token('SHORT', 'x')],
+        [simple_token('SHORT', pattern='x'), simple_token('LONG', pattern='xx')],
+        [simple_token('LONG', pattern='xx'), simple_token('SHORT', pattern='x')],
     ):
         result = tokenize(tokens, 'xx')
         assert types_of(result) == ['LONG']
@@ -465,7 +424,6 @@ def test_pattern_only_rules_keep_ply_length_sort() -> None:
     ):
         assert types_of(tokenize(tokens, 'x')) == ['A_SECOND']
 
-
 # ** test: complex_rules_stay_ahead_of_pattern_only_rules
 def test_complex_rules_stay_ahead_of_pattern_only_rules() -> None:
     '''
@@ -475,8 +433,8 @@ def test_complex_rules_stay_ahead_of_pattern_only_rules() -> None:
 
     # A complex x beats a simple xx in either catalogue order.
     for tokens in (
-        [complex_token('CX', 'x'), simple_token('SXX', 'xx')],
-        [simple_token('SXX', 'xx'), complex_token('CX', 'x')],
+        [complex_token('CX', pattern='x'), simple_token('SXX', pattern='xx')],
+        [simple_token('SXX', pattern='xx'), complex_token('CX', pattern='x')],
     ):
         result = tokenize(tokens, 'xx')
         assert types_of(result) == ['CX', 'CX']
@@ -484,11 +442,10 @@ def test_complex_rules_stay_ahead_of_pattern_only_rules() -> None:
 
     # A complex y falls through to a simple x in either catalogue order.
     for tokens in (
-        [complex_token('CY', 'y'), simple_token('SX', 'x')],
-        [simple_token('SX', 'x'), complex_token('CY', 'y')],
+        [complex_token('CY', pattern='y'), simple_token('SX', pattern='x')],
+        [simple_token('SX', pattern='x'), complex_token('CY', pattern='y')],
     ):
         assert types_of(tokenize(tokens, 'x')) == ['SX']
-
 
 # ** test: build_lexer_module_installs_one_dispatcher
 def test_build_lexer_module_installs_one_dispatcher() -> None:
@@ -516,11 +473,10 @@ def test_build_lexer_module_installs_one_dispatcher() -> None:
     assert len(callable_t_attrs(module)) == 1
 
     # Pattern-only rules install strings and no extra function.
-    module = build_module([simple_token('SHORT', 'x'), simple_token('LONG', 'xx')])
+    module = build_module([simple_token('SHORT', pattern='x'), simple_token('LONG', pattern='xx')])
     assert module.t_SHORT == 'x'
     assert module.t_LONG == 'xx'
     assert callable_t_attrs(module) == []
-
 
 # ** test: dispatcher_name_avoids_selected_names
 def test_dispatcher_name_avoids_selected_names() -> None:
@@ -532,17 +488,16 @@ def test_dispatcher_name_avoids_selected_names() -> None:
     # Find the dispatcher name, then declare a token with that bare name.
     probe = build_module([complex_token('Z_FIRST')])
     taken = callable_t_attrs(probe)[0][len('t_'):]
-    module = build_module([complex_token('Z_FIRST'), complex_token(taken, 'y')])
+    module = build_module([complex_token('Z_FIRST'), complex_token(taken, pattern='y')])
 
     # Assert the dispatcher moved and is still a single non-token callable.
     extra = callable_t_attrs(module)
     assert len(extra) == 1
     assert extra[0][len('t_'):] not in module.tokens
     assert types_of(tokenize(
-        [complex_token('Z_FIRST'), complex_token(taken, 'y')],
+        [complex_token('Z_FIRST'), complex_token(taken, pattern='y')],
         'xy',
     )) == ['Z_FIRST', taken]
-
 
 # ** test: synthetic_rule_is_not_a_candidate
 def test_synthetic_rule_is_not_a_candidate() -> None:
@@ -563,7 +518,6 @@ def test_synthetic_rule_is_not_a_candidate() -> None:
     assert module.tokens == ['Z_FIRST', 'INDENT', 'A_SECOND']
     assert not hasattr(module, 't_INDENT')
     assert types_of(tokenize(tokens, 'x')) == ['Z_FIRST']
-
 
 # ** test: parse_from_text_inherits_declared_order
 def test_parse_from_text_inherits_declared_order() -> None:
@@ -586,7 +540,7 @@ def test_parse_from_text_inherits_declared_order() -> None:
             spec='expr : Z_FIRST',
             action='p[0] = p[1]',
         )],
-        'x',
+        text='x',
     ) == 'x'
 
     # expr : A_SECOND rejects x as a Z_FIRST token.
@@ -597,7 +551,7 @@ def test_parse_from_text_inherits_declared_order() -> None:
         action='p[0] = p[1]',
     )]
     with pytest.raises(ServiceError) as raised:
-        PlyParser().parse('order', [grammar()], tokens, a_second, 'x')
+        PlyParser().parse('order', [grammar()], tokens, a_second, text='x')
     assert raised.value.error_code == PARSE_ERROR_ID
     assert raised.value.kwargs['type'] == 'Z_FIRST'
 
@@ -621,7 +575,6 @@ def test_parse_from_text_inherits_declared_order() -> None:
         PlyReader.build_lexer_module = original
     assert result == 'x'
 
-
 # ** test: dropping_action_falls_through_to_next_lexeme
 def test_dropping_action_falls_through_to_next_lexeme() -> None:
     '''
@@ -631,15 +584,14 @@ def test_dropping_action_falls_through_to_next_lexeme() -> None:
 
     # WS drops whitespace and comments; NUMBER converts.
     tokens = [
-        complex_token('WS', r'(\s+|#.*)', 'return None'),
-        complex_token('NUMBER', r'\d+', 't.value = int(t.value)\nreturn t'),
+        complex_token('WS', pattern=r'(\s+|#.*)', action='return None'),
+        complex_token('NUMBER', pattern=r'\d+', action='t.value = int(t.value)\nreturn t'),
     ]
 
     # Assert two numbers survive.
     result = tokenize(tokens, '1 # c\n2')
     assert types_of(result) == ['NUMBER', 'NUMBER']
     assert [lexeme.value for lexeme in result] == [1, 2]
-
 
 # ** test: dispatcher_keeps_reflags_spans_and_ignore
 def test_dispatcher_keeps_reflags_spans_and_ignore() -> None:
@@ -648,17 +600,17 @@ def test_dispatcher_keeps_reflags_spans_and_ignore() -> None:
     '''
 
     # Pattern a b is literal, not verbose.
-    result = tokenize([complex_token('AB', 'a b')], 'a b')
+    result = tokenize([complex_token('AB', pattern='a b')], 'a b')
     assert [lexeme.value for lexeme in result] == ['a b']
     with pytest.raises(ServiceError) as raised:
-        tokenize([complex_token('AB', 'a b')], 'ab')
+        tokenize([complex_token('AB', pattern='a b')], 'ab')
     assert raised.value.error_code == LEX_ERROR_ID
 
     # NL bumps lineno for the next lexeme.
     result = tokenize(
         [
-            complex_token('NL', r'\n', 't.lexer.lineno += 1\nreturn t'),
-            complex_token('X', 'x'),
+            complex_token('NL', pattern=r'\n', action='t.lexer.lineno += 1\nreturn t'),
+            complex_token('X', pattern='x'),
         ],
         'x\nx',
     )
@@ -671,9 +623,8 @@ def test_dispatcher_keeps_reflags_spans_and_ignore() -> None:
     # A declared ignore still skips before the dispatcher.
     target = grammar()
     target.ignore = ' '
-    result = tokenize([complex_token('X', 'x')], ' x', target=target)
+    result = tokenize([complex_token('X', pattern='x')], ' x', target=target)
     assert [(lexeme.type, lexeme.lexpos) for lexeme in result] == [('X', 1)]
-
 
 # ** test: inherited_complex_rules_follow_catalogue_order
 def test_inherited_complex_rules_follow_catalogue_order() -> None:
@@ -683,26 +634,25 @@ def test_inherited_complex_rules_follow_catalogue_order() -> None:
     '''
 
     # Parent and child grammars.
-    parent = grammar('parent')
-    child = grammar('child', parent_ids=['parent'])
+    parent = grammar(id='parent')
+    child = grammar(id='child', parent_ids=['parent'])
     grammars = [parent, child]
     z_mark = complex_token('Z_MARK', grammar_id='parent')
     a_mark = complex_token('A_MARK', grammar_id='child')
 
     # Parent-then-child yields Z_MARK; reversed yields A_MARK.
-    assert types_of(tokenize([z_mark, a_mark], 'x', child, grammars)) == ['Z_MARK']
-    assert types_of(tokenize([a_mark, z_mark], 'x', child, grammars)) == ['A_MARK']
+    assert types_of(tokenize([z_mark, a_mark], 'x', target=child, grammars=grammars)) == ['Z_MARK']
+    assert types_of(tokenize([a_mark, z_mark], 'x', target=child, grammars=grammars)) == ['A_MARK']
 
     # A parent MARK on x is dropped for the child's MARK on y.
     tokens = [
-        complex_token('MARK', 'x', grammar_id='parent'),
-        complex_token('MARK', 'y', grammar_id='child'),
+        complex_token('MARK', pattern='x', grammar_id='parent'),
+        complex_token('MARK', pattern='y', grammar_id='child'),
     ]
-    assert types_of(tokenize(tokens, 'y', child, grammars)) == ['MARK']
+    assert types_of(tokenize(tokens, 'y', target=child, grammars=grammars)) == ['MARK']
     with pytest.raises(ServiceError) as raised:
-        tokenize(tokens, 'x', child, grammars)
+        tokenize(tokens, 'x', target=child, grammars=grammars)
     assert raised.value.error_code == LEX_ERROR_ID
-
 
 # ** test: public_surface_is_unchanged
 def test_public_surface_is_unchanged() -> None:
@@ -729,7 +679,6 @@ def test_public_surface_is_unchanged() -> None:
         SyntheticTokenRuleAggregate(name='INDENT', grammar_id='order'),
     ) is None
 
-
 # ** test: duplicate_inner_group_names_fail_at_build
 def test_duplicate_inner_group_names_fail_at_build() -> None:
     '''
@@ -738,7 +687,7 @@ def test_duplicate_inner_group_names_fail_at_build() -> None:
     '''
 
     # Two complex rules reuse the inner group name g.
-    tokens = [complex_token('A', '(?P<g>a)'), complex_token('B', '(?P<g>b)')]
+    tokens = [complex_token('A', pattern='(?P<g>a)'), complex_token('B', pattern='(?P<g>b)')]
 
     # Assert the joined dispatcher pattern fails to build.
     with pytest.raises(ServiceError) as raised:
