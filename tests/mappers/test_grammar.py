@@ -17,6 +17,7 @@ from tiferet import (
 
 # ** app
 from tiferet_ly.domain import Grammar
+from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.mappers import grammar as grammar_mappers
 from tiferet_ly.mappers.grammar import (
     GrammarAggregate,
@@ -236,6 +237,33 @@ class TestGrammarAggregate:
         )
         assert grammar.ignore is None
         assert grammar.layout is None
+
+    # * test: set_parent_ids_does_not_copy_layout
+    def test_set_parent_ids_does_not_copy_layout(self, test_ctx, session):
+        '''
+        Replace parents without reading another grammar or changing layout.
+
+        :param test_ctx: The bound aggregate tester context.
+        :type test_ctx: AggregateTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Build one grammar with its own profile. No parent catalogue exists.
+        profile = LayoutProfile(indent_token='INDENT', dedent_token='DEDENT')
+        grammar = GrammarAggregate(
+            id='expr',
+            parent_ids=['base'],
+            start='expr',
+            layout=profile,
+        )
+
+        # Replacing parents keeps the same profile instance.
+        assert grammar.set_parent_ids(['other']) is None
+        assert grammar.parent_ids == ['other']
+        assert grammar.layout.indent_token == 'INDENT'
+        assert grammar.layout.dedent_token == 'DEDENT'
+        assert grammar.layout is profile
 
 # ** tester: test_grammar_config_object
 @use_tester(
@@ -547,3 +575,163 @@ class TestGrammarConfigObject:
         ).map()
         assert child.ignore is None
         assert child.parent_ids == ['arith']
+
+    # * test: layout_profile_round_trip
+    def test_layout_profile_round_trip(self, test_ctx, session):
+        '''
+        Serialize a full layout profile and map it back to an equal aggregate.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Build a profile whose values differ from every domain default.
+        aggregate = GrammarAggregate(
+            id='expr',
+            parent_ids=['term', 'factor'],
+            start='expr',
+            layout=LayoutProfile(
+                block_tokens=['IF', 'FOR', 'DEF'],
+                open_delimiters=['LPAREN'],
+                close_delimiters=['RPAREN'],
+                newline_token='NEWLINE',
+                suppress_newline_in_delimiters=False,
+                indent_token='INDENT',
+                dedent_token='DEDENT',
+                tab_size=2,
+            ),
+        )
+
+        # The profile is written in full, in list order, without the id.
+        primitive = GrammarConfigObject.from_model(aggregate).to_primitive('to_data')
+        assert primitive == {
+            'parent_ids': ['term', 'factor'],
+            'start': 'expr',
+            'layout': {
+                'block_tokens': ['IF', 'FOR', 'DEF'],
+                'open_delimiters': ['LPAREN'],
+                'close_delimiters': ['RPAREN'],
+                'newline_token': 'NEWLINE',
+                'suppress_newline_in_delimiters': False,
+                'indent_token': 'INDENT',
+                'dedent_token': 'DEDENT',
+                'tab_size': 2,
+            },
+        }
+        assert 'id' not in primitive
+
+        # Mapping back rebuilds an equal, separate profile. False and 2 are kept.
+        mapped = GrammarConfigObject.model_validate({**primitive, 'id': 'expr'}).map()
+        assert isinstance(mapped, GrammarAggregate)
+        assert mapped.model_dump() == aggregate.model_dump()
+        assert type(mapped.layout) is LayoutProfile
+        assert mapped.layout is not aggregate.layout
+        assert mapped.parent_ids == ['term', 'factor']
+        assert mapped.layout.suppress_newline_in_delimiters is False
+        assert mapped.layout.tab_size == 2
+
+    # * test: absent_layout_is_not_synthesized
+    def test_absent_layout_is_not_synthesized(self, test_ctx, session):
+        '''
+        Serialize and map a grammar with parents and no layout without inventing one.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Non-empty parents do not cause a lookup or a profile.
+        primitive = GrammarConfigObject.from_model(GrammarAggregate(
+            id='expr',
+            parent_ids=['base'],
+            start='expr',
+        )).to_primitive('to_data')
+        assert primitive == {
+            'parent_ids': ['base'],
+            'start': 'expr',
+        }
+        assert 'layout' not in primitive
+        assert 'indent_token' not in primitive
+        assert 'dedent_token' not in primitive
+
+        # Mapping leaves layout at the default None.
+        mapped = GrammarConfigObject.model_validate({**primitive, 'id': 'expr'}).map()
+        assert mapped.layout is None
+        assert mapped.parent_ids == ['base']
+
+    # * test: minimal_layout_restores_defaults
+    def test_minimal_layout_restores_defaults(self, test_ctx, session):
+        '''
+        Omit a null newline token, keep empty lists, and restore defaults on map.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Only the two required names are declared.
+        original = GrammarAggregate(
+            id='expr',
+            parent_ids=[],
+            start='expr',
+            layout=LayoutProfile(indent_token='INDENT', dedent_token='DEDENT'),
+        )
+
+        # Empty lists and non-null defaults are written; the null newline token is not.
+        to_data = GrammarConfigObject.from_model(original).to_primitive('to_data')
+        assert 'layout' in to_data
+        assert to_data['layout'] == {
+            'block_tokens': [],
+            'open_delimiters': [],
+            'close_delimiters': [],
+            'suppress_newline_in_delimiters': True,
+            'indent_token': 'INDENT',
+            'dedent_token': 'DEDENT',
+            'tab_size': 4,
+        }
+        assert 'newline_token' not in to_data['layout']
+
+        # Mapping back restores the domain defaults.
+        mapped = GrammarConfigObject.model_validate({**to_data, 'id': 'expr'}).map()
+        assert mapped.model_dump() == original.model_dump()
+        assert mapped.layout.newline_token is None
+        assert mapped.layout.block_tokens == []
+        assert mapped.layout.suppress_newline_in_delimiters is True
+        assert mapped.layout.tab_size == 4
+
+    # * test: ignore_round_trip_without_layout
+    def test_ignore_round_trip_without_layout(self, test_ctx, session):
+        '''
+        Round-trip a declared ignore string on a grammar with no layout.
+
+        :param test_ctx: The bound transfer-object tester context.
+        :type test_ctx: TransferObjectTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Ignore is written; layout is not.
+        original = GrammarAggregate(
+            id='expr',
+            parent_ids=['base'],
+            start='expr',
+            ignore=' \t',
+        )
+        primitive = GrammarConfigObject.from_model(original).to_primitive('to_data')
+        assert primitive == {
+            'parent_ids': ['base'],
+            'start': 'expr',
+            'ignore': ' \t',
+        }
+        assert 'id' not in primitive
+        assert 'layout' not in primitive
+
+        # Mapping back keeps ignore and leaves layout None.
+        mapped = GrammarConfigObject.model_validate({**primitive, 'id': 'expr'}).map()
+        assert mapped.ignore == ' \t'
+        assert mapped.layout is None
+        assert mapped.model_dump() == original.model_dump()

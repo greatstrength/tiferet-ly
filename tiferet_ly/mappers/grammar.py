@@ -20,12 +20,14 @@ from tiferet_ly.domain import Grammar
 class GrammarAggregate(Grammar, Aggregate):
     '''
     A mutable grammar that stores identity, ordered parents, a start name,
-    and an optional ignore string.
+    an optional ignore string, and the grammar-own layout profile inherited
+    from Grammar.
 
     Changing those fields does not check that parents exist, that the graph
     is acyclic, that the start name is a production, or that ignore is a
     valid expression. Ignore is this grammar's own value. It is not taken
-    from parent_ids. Layout is not stored.
+    from parent_ids. Changing start or parent_ids does not copy layout or
+    ignore from parent_ids.
     '''
 
     # * method: set_start
@@ -64,7 +66,9 @@ class GrammarConfigObject(Grammar, TransferObject):
     Mapping keeps parent order and a declared ignore string, and drops only
     the grammar id. A missing or null ignore stays None and is omitted when
     serialized. Mapping does not resolve parents, the start production, or
-    ignore, and it does not map layout.
+    ignore. A declared layout profile is copied as stored; a missing or null
+    layout stays None, is omitted when serialized, and is never invented or
+    taken from parent_ids.
     '''
 
     # * attribute: _ROLES
@@ -82,7 +86,10 @@ class GrammarConfigObject(Grammar, TransferObject):
         Map this configuration to a grammar aggregate.
 
         A declared ignore string is passed through; a missing ignore is left
-        to the aggregate default None.
+        to the aggregate default None. A declared layout profile is kept, and
+        a missing one is left to the default None; no profile is invented.
+        Mapping does not resolve parents, the start production, or a parent's
+        layout or ignore.
 
         :param overrides: Field replacements and extra construction values.
         :type overrides: dict
@@ -100,7 +107,9 @@ class GrammarConfigObject(Grammar, TransferObject):
         Create grammar configuration data from a grammar or aggregate.
 
         Ignore is copied as stored on the model and is not composed from
-        parent_ids.
+        parent_ids. Layout is copied when the model has one, and none is
+        invented when it does not. Parents are not reshaped and start is not
+        resolved.
 
         :param model: A grammar domain object or grammar aggregate.
         :type model: Grammar
