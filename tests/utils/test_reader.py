@@ -13,6 +13,9 @@ from tiferet.interfaces.core import ServiceError
 
 # ** app
 from tiferet_ly.domain.layout import LayoutProfile
+from tiferet_ly.events import lex as lex_events
+from tiferet_ly.events import parse as parse_events
+from tiferet_ly.events import render as render_events
 from tiferet_ly.mappers.ast import AstNodeAggregate
 from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.mappers.lexeme import LexemeAggregate
@@ -26,6 +29,7 @@ from tiferet_ly.mappers.token import (
     SyntheticTokenRuleAggregate,
 )
 from tiferet_ly.utils import lex as lex_module
+from tiferet_ly.utils import render as render_util
 from tiferet_ly.utils.core import (
     ACTION_EXECUTION_FAILED_ID,
     GRAMMAR_NOT_FOUND_ID,
@@ -833,14 +837,6 @@ def test_ply_import_is_isolated() -> None:
     '''
     Test that only the lex and parse util modules import ply.
     '''
-
-    # Import the thin events and confirm they do not pull ply into their module.
-    import tiferet_ly.events.lex as lex_events
-    import tiferet_ly.events.parse as parse_events
-
-    # Import the render events added by RFP-008 as well.
-    import tiferet_ly.events.render as render_events
-    import tiferet_ly.utils.render as render_util
 
     # Assert ply is absent from the event modules and the renderer.
     assert 'ply' not in lex_events.__dict__
