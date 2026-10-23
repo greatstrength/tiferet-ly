@@ -8,10 +8,11 @@ from typing import Any, get_type_hints
 
 # ** infra
 import yaml
-
-# ** app
 from tiferet.events.core import DomainEvent
 from tiferet.mappers.cli import CliCommandConfigObject
+
+# ** app
+import tiferet_ly.events.render as render_events
 from tiferet_ly.events.render import RenderResult
 from tiferet_ly.interfaces.parser import ParserService
 from tiferet_ly.mappers.ast import AstNodeAggregate
@@ -35,7 +36,6 @@ def test_render_result_returns_string() -> None:
     assert as_node == node.format()
     assert isinstance(as_node, str)
 
-
 # ** test: render_result_is_passthrough_when_flag_off
 def test_render_result_is_passthrough_when_flag_off() -> None:
     '''
@@ -52,22 +52,17 @@ def test_render_result_is_passthrough_when_flag_off() -> None:
     assert type(omitted) is int
     assert flagged_off is node
 
-
 # ** test: render_events_do_not_import_ply_or_write
 def test_render_events_do_not_import_ply_or_write() -> None:
     '''
     Test that render events import neither ply nor write methods.
     '''
 
-    # Import the event module and inspect its surface.
-    import tiferet_ly.events.render as render_events
-
     # Assert ply is absent and the events have no save or delete.
     assert 'ply' not in render_events.__dict__
     assert not hasattr(RenderResult, 'save')
     assert not hasattr(RenderResult, 'delete')
     assert not hasattr(render_events, 'ReturnResult')
-
 
 # ** test: parse_feature_wires_render_result_step
 def test_parse_feature_wires_render_result_step() -> None:
@@ -84,7 +79,7 @@ def test_parse_feature_wires_render_result_step() -> None:
 
     # Assert the request schema and the flagged terminal step.
     assert parse['params_schema']['grammar_id'] == 'str'
-    assert parse['params_schema']['text'] == 'str'
+    assert parse['params_schema']['text'] == {'type': 'str', 'required': False}
     assert parse['params_schema']['render_result'] == {
         'type': 'bool',
         'required': False,
@@ -109,7 +104,6 @@ def test_parse_feature_wires_render_result_step() -> None:
     assert 'data_key' not in lex['steps'][-1]
     assert 'render_result' not in lex
     assert get_type_hints(ParserService.parse)['return'] is Any
-
 
 # ** test: parse_cli_render_result_dests_to_flag
 def test_parse_cli_render_result_dests_to_flag() -> None:

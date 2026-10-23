@@ -3,14 +3,17 @@
 # *** imports
 
 # ** core
-from typing import List
+from typing import Dict, List, Optional
+
+# ** infra
+from tiferet.events.core import DomainEvent
 
 # ** app
-from tiferet.events.core import DomainEvent
 from ..interfaces.lexer import LexerService
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate
 from ..mappers.token import TokenRuleAggregate
+from .core import parameters_required
 
 # *** events
 
@@ -36,12 +39,13 @@ class LexText(DomainEvent):
         self.lexer_service = lexer_service
 
     # * method: execute
-    @DomainEvent.parameters_required(['grammar_id', 'text', 'tokens', 'grammars'])
+    @parameters_required(['grammar_id', 'text', 'tokens', 'grammars'])
     def execute(self,
             grammar_id: str,
             text: str,
             tokens: List[TokenRuleAggregate],
             grammars: List[GrammarAggregate],
+            rewrites: Optional[Dict[str, type]] = None,
             **kwargs) -> List[LexemeAggregate]:
         '''
         Tokenize text through the injected lexer service.
@@ -54,6 +58,8 @@ class LexText(DomainEvent):
         :type tokens: List[TokenRuleAggregate]
         :param grammars: The collected grammar catalogue.
         :type grammars: List[GrammarAggregate]
+        :param rewrites: Optional action shorthand bindings, forwarded as given.
+        :type rewrites: Optional[Dict[str, type]]
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: The recognized lexemes.
@@ -66,4 +72,5 @@ class LexText(DomainEvent):
             grammars,
             tokens,
             text,
+            rewrites=rewrites,
         )
