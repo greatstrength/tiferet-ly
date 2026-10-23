@@ -15,8 +15,8 @@ from tiferet.interfaces import Service
 from tiferet.repos.core import ConfigurationRepository
 
 # ** app
-from tiferet_ly.interfaces import grammar as grammar_interface
 from tiferet_ly.domain.layout import LayoutProfile
+from tiferet_ly.interfaces import grammar as grammar_interface
 from tiferet_ly.interfaces.grammar import GrammarService
 from tiferet_ly.mappers.grammar import (
     GrammarAggregate,
@@ -159,8 +159,6 @@ def _seeded_grammars() -> dict:
         },
     }
 
-# *** fixtures
-
 # ** function: neighbour_document
 def _neighbour_document() -> dict:
     '''
@@ -213,6 +211,8 @@ def _layout_attributes(layout: LayoutProfile) -> dict:
         'dedent_token': layout.dedent_token,
         'tab_size': layout.tab_size,
     }
+
+# *** fixtures
 
 # ** fixture: write_yaml
 @pytest.fixture
@@ -931,7 +931,8 @@ class TestGrammarConfigRepository:
         parsed = _parsed(path)
         bodies = parsed['grammars']
         assert list(bodies['indented']) == [*list(bodies['plain']), 'layout']
-        assert {key: value for key, value in bodies['indented'].items() if key != 'layout'} == bodies['plain']
+        indented_without_layout = {key: value for key, value in bodies['indented'].items() if key != 'layout'}
+        assert indented_without_layout == bodies['plain']
         assert bodies['indented']['layout'] == _FULL_LAYOUT
         assert list(bodies['indented']['layout']) == list(_FULL_LAYOUT)
         assert 'id' not in bodies['indented']
