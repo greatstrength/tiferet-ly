@@ -83,3 +83,57 @@ def test_layout_profile_forbids_extra_fields() -> None:
     # An unrecognized field is rejected.
     with pytest.raises(ValidationError):
         LayoutProfile(indent_token='INDENT', dedent_token='DEDENT', unknown='value')
+
+# ** test: layout_profile_rejects_non_positive_tab_size
+@pytest.mark.parametrize('tab_size', [0, -1, False])
+def test_layout_profile_rejects_non_positive_tab_size(tab_size) -> None:
+    '''
+    Test that a tab_size the field stores as an integer less than 1 raises
+    ValidationError at construction.
+
+    :param tab_size: The declared width under test.
+    :type tab_size: int | bool
+    '''
+
+    # A width of zero, a negative width, and False (stored as 0) are refused.
+    with pytest.raises(ValidationError):
+        LayoutProfile(indent_token='INDENT', dedent_token='DEDENT', tab_size=tab_size)
+
+# ** test: layout_profile_accepts_positive_tab_size
+@pytest.mark.parametrize('tab_size, stored', [
+    (1, 1),
+    (True, 1),
+    (4.0, 4),
+    ('4', 4),
+])
+def test_layout_profile_accepts_positive_tab_size(tab_size, stored) -> None:
+    '''
+    Test that a tab_size the field already coerces to a positive integer
+    still constructs and stores that integer.
+
+    :param tab_size: The declared width under test.
+    :type tab_size: int | bool | float | str
+    :param stored: The integer the profile is expected to store.
+    :type stored: int
+    '''
+
+    # Existing int coercion is unchanged for positive values.
+    profile = LayoutProfile(indent_token='INDENT', dedent_token='DEDENT', tab_size=tab_size)
+    assert profile.tab_size == stored
+    assert type(profile.tab_size) is int
+
+# ** test: layout_profile_rejects_non_positive_tab_size_assignment
+def test_layout_profile_rejects_non_positive_tab_size_assignment() -> None:
+    '''
+    Test that assigning a zero tab_size to an existing profile raises
+    ValidationError and leaves the stored width unchanged.
+    '''
+
+    # Construct with the default width of 4.
+    profile = LayoutProfile(indent_token='INDENT', dedent_token='DEDENT')
+    assert profile.tab_size == 4
+
+    # Assignment re-validates and refuses zero.
+    with pytest.raises(ValidationError):
+        profile.tab_size = 0
+    assert profile.tab_size == 4

@@ -282,17 +282,23 @@ declared action involved at all.
 
 When the target grammar declared a layout profile, a lexeme-only read
 gains one more step before it hands anything back: a stateless filter
-walks the engine's own lexeme stream and, using only the names the
-profile declares, injects the two synthetic lexemes an
-indentation-sensitive language needs and, unless the profile turns this
-off, drops a line-break lexeme while delimiter depth is open. Indent and
-dedent are column-width decisions, not single-step ones: a column change
-is measured against the profile's declared tab size, so exiting several
-indentation levels at once — including whatever is still open when the
-stream ends — injects one dedent per level, not one dedent per line. The
-filter never re-matches text and never consults the engine again; it
-only reshapes a stream the engine already produced. A grammar with no
-layout profile is read exactly as before.
+walks the engine's own lexeme stream and, using the names and the
+declared width the profile carries, injects the synthetic indent and
+dedent lexemes an indentation-sensitive language needs and, unless the
+profile turns this off, drops a line-break lexeme while delimiter depth
+is open. Indent and dedent are column-width decisions, not single-step
+ones. An indentation level is the source column integer-divided by that
+width, and the width is a positive integer. A literal tab in the source
+counts as one declared width when the column is measured; every other
+character counts as one. Entering one or more levels injects one indent
+per level entered, just as leaving one or more levels, including levels
+still open when the stream ends, injects one dedent per level left. A
+column change that does not cross a level boundary injects nothing. An
+indent is still authorized only by a pending block-introducing token; an
+unauthorized deeper column does not open a level. The filter never
+re-matches text and never consults the engine again; it only reshapes a
+stream the engine already produced. A grammar with no layout profile is
+read exactly as before.
 
 **Verdict:** agnostic to all four axes. Reading text looks identical no
 matter which language was declared, how any rule was shaped, or which
@@ -372,7 +378,8 @@ mechanism.
   tree and does not already own one uses the same node.
 - The layout-filter mechanism, when a grammar declares a profile: one
   stateless stream transform, applied the same way for every language,
-  shaped only by the token names that language's own profile names.
+  shaped only by the token names and the declared width that language's
+  own profile names.
 
 **Variable — one definition per declared language:**
 - The token and production catalogues: which words and sentence patterns
@@ -382,8 +389,9 @@ mechanism.
 - Which grammars exist, which parents each extends, and which start
   symbol a reader begins from.
 - Whether any grammar declares an ignore pattern or a layout profile at
-  all, and which already-recognized token names a declared profile points
-  at as block, delimiter, or newline tokens.
+  all, which already-recognized token names a declared profile points at
+  as block, delimiter, or newline tokens, and the declared width one
+  indentation level spans in that profile.
 - Whatever structured result a language's actions choose to build. There
   is no required shape. A language that already owns a tree binds its own
   factories as extra rewrite-table rows.
@@ -440,9 +448,9 @@ The seams this distillation makes visible, each independently scopeable:
    and the Grammar-own ignore/layout facts specified by TLY1-RFP-010
    (issue #23) extend this shape without breaking it: a synthetic token
    is still a catalogue entry translated by the same per-rule mechanism
-   (Section 5.2), and a layout profile only ever reads already-recognized
-   token names — it declares nothing the engine itself needs to know
-   about.
+   (Section 5.2), and a layout profile reads already-recognized token
+   names and a declared width; it declares nothing the engine itself
+   needs to know about.
 2. **Treat the optional tree as a convenience, not a contract.** Rendering
    or walking a result must not assume every successful read produced an
    AstNode.
