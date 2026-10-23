@@ -10,9 +10,8 @@ from unittest.mock import Mock
 import pytest
 import yaml
 from pydantic import ValidationError
-from tiferet.events.core import a as tiferet_a
 from tiferet.assets.core import TiferetError
-from tiferet.events.core import DomainEvent
+from tiferet.events.core import DomainEvent, a as tiferet_a
 
 # ** app
 from tiferet_ly import assets as a
