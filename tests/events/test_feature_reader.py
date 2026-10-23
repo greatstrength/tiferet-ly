@@ -130,7 +130,6 @@ def build_app(tmp_path, monkeypatch) -> App:
     # Return the wired app.
     return App('tiferet_ly', app_config=str(app_path))
 
-
 # ** function: spy
 def spy(monkeypatch, cls, method_name: str) -> list:
     '''
@@ -156,7 +155,6 @@ def spy(monkeypatch, cls, method_name: str) -> list:
 
     monkeypatch.setattr(cls, method_name, wrapper)
     return calls
-
 
 # ** function: number
 def number(value):
@@ -230,7 +228,6 @@ def test_feature_catalogues_name_reader_inputs() -> None:
         },
     }
 
-
 # ** test: parse_feature_accepts_lexeme_stream
 def test_parse_feature_accepts_lexeme_stream(tmp_path, monkeypatch) -> None:
     '''
@@ -262,7 +259,6 @@ def test_parse_feature_accepts_lexeme_stream(tmp_path, monkeypatch) -> None:
     assert value == 3
     assert rendered == '3'
 
-
 # ** test: parse_feature_without_text_or_lexemes_fails_in_service
 def test_parse_feature_without_text_or_lexemes_fails_in_service(tmp_path, monkeypatch) -> None:
     '''
@@ -282,7 +278,6 @@ def test_parse_feature_without_text_or_lexemes_fails_in_service(tmp_path, monkey
     assert len(calls) == 1
     assert raised.value.error_code == 'PARSE_INPUT_INVALID'
     assert raised.value.kwargs['reason'] == 'missing'
-
 
 # ** test: features_pass_rewrite_factories_through
 def test_features_pass_rewrite_factories_through(tmp_path, monkeypatch) -> None:
@@ -316,7 +311,6 @@ def test_features_pass_rewrite_factories_through(tmp_path, monkeypatch) -> None:
     assert [lexeme.type for lexeme in lexemes] == ['NUMBER', 'PLUS', 'NUMBER']
     assert value == 3
 
-
 # ** test: features_reject_non_dict_rewrites
 @pytest.mark.parametrize('feature_id', ['lex.default', 'parse.default'])
 def test_features_reject_non_dict_rewrites(tmp_path, monkeypatch, feature_id) -> None:
@@ -341,7 +335,6 @@ def test_features_reject_non_dict_rewrites(tmp_path, monkeypatch, feature_id) ->
     assert [violation['field'] for violation in raised.value.kwargs['violations']] == ['rewrites']
     assert lex_calls == []
     assert parse_calls == []
-
 
 # ** test: text_features_are_unchanged
 def test_text_features_are_unchanged(tmp_path, monkeypatch) -> None:

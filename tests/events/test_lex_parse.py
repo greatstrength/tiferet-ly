@@ -129,7 +129,6 @@ def test_parse_text_passes_catalogues_to_service() -> None:
     )
     assert result == 3
 
-
 # ** test: lex_text_keeps_text_second_and_forwards_rewrites
 def test_lex_text_keeps_text_second_and_forwards_rewrites() -> None:
     '''
@@ -167,7 +166,6 @@ def test_lex_text_keeps_text_second_and_forwards_rewrites() -> None:
         'self', 'grammar_id', 'grammars', 'tokens', 'text', 'rewrites',
     ]
 
-
 # ** test: lex_text_still_requires_text
 @pytest.mark.parametrize('text', [None, '', 'missing'])
 def test_lex_text_still_requires_text(text) -> None:
@@ -195,7 +193,6 @@ def test_lex_text_still_requires_text(text) -> None:
     assert 'text' in str(raised.value)
     assert 'rewrites' not in str(raised.value)
     lexer_service.tokenize.assert_not_called()
-
 
 # ** test: parse_text_keeps_text_second_positionally
 def test_parse_text_keeps_text_second_positionally() -> None:
@@ -241,7 +238,6 @@ def test_parse_text_keeps_text_second_positionally() -> None:
         rewrites=None,
     )
 
-
 # ** test: parse_text_forwards_lexemes_without_text
 def test_parse_text_forwards_lexemes_without_text() -> None:
     '''
@@ -268,7 +264,6 @@ def test_parse_text_forwards_lexemes_without_text() -> None:
     assert args == ('arith', grammars, tokens, productions, None)
     assert kwargs['lexemes'] is stream
     assert kwargs['rewrites'] is None
-
 
 # ** test: parse_text_leaves_exactly_one_to_service
 @pytest.mark.parametrize('inputs, reason', [
@@ -297,7 +292,6 @@ def test_parse_text_leaves_exactly_one_to_service(inputs, reason) -> None:
     # Assert the service's structured error and reason.
     assert raised.value.error_code == PARSE_INPUT_INVALID_ID
     assert raised.value.kwargs['reason'] == reason
-
 
 # ** test: parse_text_forwards_rewrites_object
 def test_parse_text_forwards_rewrites_object() -> None:
