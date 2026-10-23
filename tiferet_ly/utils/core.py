@@ -4,9 +4,9 @@
 
 # ** infra
 import ply.lex as lex
+from tiferet.interfaces.core import ServiceError
 
 # ** app
-from tiferet.interfaces.core import ServiceError
 from tiferet_ly.assets.grammar import GRAMMAR_NOT_FOUND_ID
 from tiferet_ly.assets.reader import (
     LEX_ERROR_ID,
@@ -16,6 +16,7 @@ from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 from tiferet_ly.utils.grammar import GrammarRuleSelector
 from tiferet_ly.utils.translation import RuleTranslator
@@ -39,8 +40,10 @@ class PlyReader:
     Assemble a declared grammar into a PLY lexer without caching a table.
 
     The helper resolves the grammar, installs translated tokens in
-    selected order, and raises span-bearing reader errors. It does not
-    tokenize or parse.
+    selected order, and raises span-bearing reader errors. A synthetic
+    name stays in that order and receives no t_ attribute. A declared
+    ignore string is installed as t_ignore on the lexer module. It does
+    not tokenize or parse.
     '''
 
     # * method: resolve_grammar (static)
@@ -82,23 +85,25 @@ class PlyReader:
     def install_tokens(
             grammar: GrammarAggregate,
             grammars: list[GrammarAggregate],
-            tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate],
+            tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate | SyntheticTokenRuleAggregate],
             rewrites: dict | None = None,
         ) -> _TokenModule:
         '''
         Install selected token rules in selected order.
 
         Selection runs first. Each survivor is translated and stored
-        under its ``t_`` name. The bare names on ``tokens`` stay in
-        that same order, including a later simple token after an
-        earlier complex token.
+        under its ``t_`` name. A ``None`` translation, from a synthetic
+        token, contributes no attribute. ``tokens`` is
+        ``RuleTranslator.derive_tokens`` of the selected rules, synthetic
+        names included, so the bare names stay in selected order,
+        including a later simple token after an earlier complex token.
 
         :param grammar: The grammar whose ancestry to apply.
         :type grammar: GrammarAggregate
         :param grammars: The declared grammar catalogue.
         :type grammars: list[GrammarAggregate]
         :param tokens: The declared token catalogue, in input order.
-        :type tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate]
+        :type tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate | SyntheticTokenRuleAggregate]
         :param rewrites: Optional rewrites forwarded to token translation. Defaults to None.
         :type rewrites: dict | None
         :return: A fresh module whose ``tokens`` list is the installed names.
@@ -114,18 +119,58 @@ class PlyReader:
 
         # Install each translation in the selected order. Forward rewrites.
         module = _TokenModule()
-        names = []
         for rule in selected:
-            attribute, value = RuleTranslator.translate_token_rule(
+            translated = RuleTranslator.translate_token_rule(
                 rule,
                 rewrites=rewrites,
             )
-            setattr(module, attribute, value)
-            names.append(rule.name)
 
-        # The name list is the selected order, not a PLY sort.
-        module.tokens = names
+            # A synthetic token translates to None. Install no attribute.
+            if translated is None:
+                continue
+            attribute, value = translated
+            setattr(module, attribute, value)
+
+        # The name list is the selected order, synthetic names included.
+        module.tokens = RuleTranslator.derive_tokens(selected)
         return module
+
+    # * method: select_token_names (static)
+    @staticmethod
+    def select_token_names(
+            grammar: GrammarAggregate,
+            grammars: list[GrammarAggregate],
+            tokens: list[
+                SimpleTokenRuleAggregate
+                | ComplexTokenRuleAggregate
+                | SyntheticTokenRuleAggregate
+            ],
+        ) -> list[str]:
+        '''
+        Derive selected token names without building a lexer.
+
+        Selection is ``GrammarRuleSelector.select_tokens``. Names are
+        ``RuleTranslator.derive_tokens`` of that result. A synthetic
+        name is included. No attribute is installed, and ``lex.lex``
+        is not called.
+
+        :param grammar: The grammar whose ancestry to apply.
+        :type grammar: GrammarAggregate
+        :param grammars: The declared grammar catalogue.
+        :type grammars: list[GrammarAggregate]
+        :param tokens: The declared token catalogue, in input order.
+        :type tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate | SyntheticTokenRuleAggregate]
+        :return: Bare token names in selected order.
+        :rtype: list[str]
+        '''
+
+        # Select, then copy names. Do not translate or build a lexer.
+        selected = GrammarRuleSelector.select_tokens(
+            grammar,
+            grammars,
+            tokens,
+        )
+        return RuleTranslator.derive_tokens(selected)
 
     # * method: raise_lex_error (static)
     @staticmethod
@@ -166,7 +211,7 @@ class PlyReader:
     def build_lexer(
             grammar_id: str,
             grammars: list[GrammarAggregate],
-            tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate],
+            tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate | SyntheticTokenRuleAggregate],
             rewrites: dict | None = None,
         ):
         '''
@@ -174,14 +219,16 @@ class PlyReader:
 
         The grammar is resolved before PLY is called. Each call builds
         a new lexer with ``optimize=0``, so no PLY table is read or
-        written. A PLY build failure raises ``READER_BUILD_FAILED_ID``.
+        written. ``t_ignore`` is the resolved grammar's ``ignore`` when
+        that value is not ``None``; when it is ``None`` the attribute is
+        omitted. A PLY build failure raises ``READER_BUILD_FAILED_ID``.
 
         :param grammar_id: The grammar identifier to resolve.
         :type grammar_id: str
         :param grammars: The declared grammar catalogue.
         :type grammars: list[GrammarAggregate]
         :param tokens: The declared token catalogue, in input order.
-        :type tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate]
+        :type tokens: list[SimpleTokenRuleAggregate | ComplexTokenRuleAggregate | SyntheticTokenRuleAggregate]
         :param rewrites: Optional rewrites forwarded to token installation. Defaults to None.
         :type rewrites: dict | None
         :return: A new PLY lexer.
@@ -198,6 +245,10 @@ class PlyReader:
             tokens,
             rewrites=rewrites,
         )
+
+        # Install the resolved grammar's own ignore string, exactly as declared.
+        if grammar.ignore is not None:
+            module.t_ignore = grammar.ignore
 
         # Point lexical failures at the span-bearing helper.
         def t_error(token):
