@@ -1,0 +1,57 @@
+testers:
+  test_lexeme:
+    module_path: tiferet_ly.domain.lexeme
+    class_name: Lexeme
+    attributes:
+      type: NUMBER
+      value: 3
+      lineno: 1
+      lexpos: 0
+    tests:
+      lexeme_has_exactly_four_fields:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: lexeme
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args:
+              - $r.lexeme
+            as: lexeme_cls
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args:
+              - $r.lexeme_cls
+              - model_fields
+            as: model_fields
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args:
+              - $r.model_fields
+            as: field_names
+        assert:
+          - check: type
+            outcome: lexeme
+            module_path: tiferet.domain.core
+            class_name: DomainObject
+          - check: equals
+            outcome: field_names
+            equals:
+              - lexpos
+              - lineno
+              - type
+              - value
+          - check: fields
+            outcome: lexeme
+            fields:
+              type: NUMBER
+              value: 3
+              lineno: 1
+              lexpos: 0
