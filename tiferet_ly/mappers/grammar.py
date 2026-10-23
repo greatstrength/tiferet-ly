@@ -84,7 +84,6 @@ class GrammarAggregate(Grammar, Aggregate):
         # Assign the whole profile; validate_assignment=True runs the field's own validation.
         self.layout = layout
 
-
 # ** mapper: grammar_config_object
 class GrammarConfigObject(Grammar, TransferObject):
     '''

@@ -176,7 +176,6 @@ class GrammarEvent(DomainEvent):
             start=grammar.start,
         )
 
-
 # ** event: add_grammar
 class AddGrammar(GrammarEvent):
     '''
@@ -264,7 +263,6 @@ class AddGrammar(GrammarEvent):
         self.grammar_service.save(grammar)
         return grammar
 
-
 # ** event: get_grammar
 class GetGrammar(GrammarEvent):
     '''
@@ -288,7 +286,6 @@ class GetGrammar(GrammarEvent):
         # Load and return the grammar, raising when it is absent.
         return self._require_grammar(id)
 
-
 # ** event: list_grammars
 class ListGrammars(GrammarEvent):
     '''
@@ -308,7 +305,6 @@ class ListGrammars(GrammarEvent):
 
         # Return the unfiltered catalogue.
         return self.grammar_service.list()
-
 
 # ** event: set_grammar_start
 class SetGrammarStart(GrammarEvent):
@@ -360,7 +356,6 @@ class SetGrammarStart(GrammarEvent):
         # Persist and return the updated grammar.
         self.grammar_service.save(grammar)
         return grammar
-
 
 # ** event: set_grammar_parent_ids
 class SetGrammarParentIds(GrammarEvent):
@@ -417,7 +412,6 @@ class SetGrammarParentIds(GrammarEvent):
         self.grammar_service.save(grammar)
         return grammar
 
-
 # ** event: set_grammar_ignore
 class SetGrammarIgnore(GrammarEvent):
     '''
@@ -452,7 +446,6 @@ class SetGrammarIgnore(GrammarEvent):
         # Persist and return the updated grammar.
         self.grammar_service.save(grammar)
         return grammar
-
 
 # ** event: set_grammar_layout
 class SetGrammarLayout(GrammarEvent):
@@ -489,7 +482,6 @@ class SetGrammarLayout(GrammarEvent):
         # Persist and return the updated grammar.
         self.grammar_service.save(grammar)
         return grammar
-
 
 # ** event: remove_grammar
 class RemoveGrammar(GrammarEvent):

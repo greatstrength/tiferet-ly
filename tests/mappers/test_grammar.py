@@ -39,7 +39,6 @@ def test_grammar_aggregate_and_config_object_exist() -> None:
     assert 'to_model' in GrammarConfigObject._ROLES
     assert 'to_data' in GrammarConfigObject._ROLES
 
-
 # ** test: grammar_round_trip
 def test_grammar_round_trip() -> None:
     '''
@@ -63,7 +62,6 @@ def test_grammar_round_trip() -> None:
     # Assert field equality.
     assert isinstance(restored, GrammarAggregate)
     assert restored.model_dump() == SAMPLE_GRAMMAR.model_dump()
-
 
 # ** test: grammar_map_raises_same_domain_error_on_corrupted_invariant
 def test_grammar_map_raises_same_domain_error_on_corrupted_invariant() -> None:
@@ -89,7 +87,6 @@ def test_grammar_map_raises_same_domain_error_on_corrupted_invariant() -> None:
 
     # Both failures are ValidationError (mapper adds no validation of its own).
     assert type(map_error.value) is type(domain_error.value)
-
 
 # ** test: grammar_aggregate_mutations
 def test_grammar_aggregate_mutations() -> None:

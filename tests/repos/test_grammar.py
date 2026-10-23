@@ -78,7 +78,6 @@ def test_int_grammar_repo_crud_five_methods(grammar_repo: GrammarConfigRepositor
     grammar_repo.delete('missing')
     assert {grammar.id for grammar in grammar_repo.list()} == {'core', 'tiferet_module'}
 
-
 # ** test_int: grammar_repo_serialized_yaml_shape
 def test_int_grammar_repo_serialized_yaml_shape(
     grammar_repo: GrammarConfigRepository,

@@ -59,7 +59,6 @@ def grammar(
         start=start,
     )
 
-
 # ** function: production
 def production(
         name: str = 'expression',
@@ -85,7 +84,6 @@ def production(
         spec=spec,
     )
 
-
 # ** function: token
 def token(
         name: str = 'PLUS',
@@ -107,7 +105,6 @@ def token(
         grammar_id=grammar_id,
         pattern=r'\+',
     )
-
 
 # ** function: grammar_service
 def grammar_service(grammars=None, exists=None) -> Mock:
@@ -134,7 +131,6 @@ def grammar_service(grammars=None, exists=None) -> Mock:
         service.exists.return_value = exists
     return service
 
-
 # ** function: production_service
 def production_service(productions=None) -> Mock:
     '''
@@ -150,7 +146,6 @@ def production_service(productions=None) -> Mock:
     service = Mock()
     service.list.return_value = list(productions or [])
     return service
-
 
 # ** function: token_service
 def token_service(tokens=None) -> Mock:
@@ -225,7 +220,6 @@ def test_grammar_event_injects_grammar_service() -> None:
     # Assert the service is stored on the base event.
     assert event.grammar_service is service
 
-
 # ** test: add_grammar_missing_parent_raises
 def test_add_grammar_missing_parent_raises() -> None:
     '''
@@ -252,7 +246,6 @@ def test_add_grammar_missing_parent_raises() -> None:
     assert raised.value.kwargs['parent_id'] == 'missing'
     grammars.save.assert_not_called()
 
-
 # ** test: add_grammar_direct_cycle_raises
 def test_add_grammar_direct_cycle_raises() -> None:
     '''
@@ -277,7 +270,6 @@ def test_add_grammar_direct_cycle_raises() -> None:
         )
     assert raised.value.error_code == a.error.GRAMMAR_CYCLE_DETECTED_ID
     grammars.save.assert_not_called()
-
 
 # ** test: add_grammar_transitive_cycle_raises
 def test_add_grammar_transitive_cycle_raises() -> None:
@@ -306,7 +298,6 @@ def test_add_grammar_transitive_cycle_raises() -> None:
     assert raised.value.error_code == a.error.GRAMMAR_CYCLE_DETECTED_ID
     grammars.save.assert_not_called()
 
-
 # ** test: add_grammar_start_not_found_raises
 def test_add_grammar_start_not_found_raises() -> None:
     '''
@@ -331,7 +322,6 @@ def test_add_grammar_start_not_found_raises() -> None:
     assert raised.value.error_code == a.error.GRAMMAR_START_NOT_FOUND_ID
     grammars.save.assert_not_called()
 
-
 # ** test: add_grammar_succeeds_with_own_production
 def test_add_grammar_succeeds_with_own_production() -> None:
     '''
@@ -355,7 +345,6 @@ def test_add_grammar_succeeds_with_own_production() -> None:
     assert result.id == 'arithmetic'
     assert result.start == 'expression'
     grammars.save.assert_called_once()
-
 
 # ** test: add_grammar_succeeds_with_ancestor_production
 def test_add_grammar_succeeds_with_ancestor_production() -> None:
@@ -383,7 +372,6 @@ def test_add_grammar_succeeds_with_ancestor_production() -> None:
     assert result.parent_ids == ['arithmetic']
     grammars.save.assert_called_once()
 
-
 # ** test: get_grammar_raises_when_missing
 def test_get_grammar_raises_when_missing() -> None:
     '''
@@ -402,7 +390,6 @@ def test_get_grammar_raises_when_missing() -> None:
         )
     assert raised.value.error_code == a.error.GRAMMAR_NOT_FOUND_ID
 
-
 # ** test: list_grammars_returns_unfiltered_catalogue
 def test_list_grammars_returns_unfiltered_catalogue() -> None:
     '''
@@ -419,7 +406,6 @@ def test_list_grammars_returns_unfiltered_catalogue() -> None:
 
     # Assert the catalogue is returned as-is.
     assert result == catalogue
-
 
 # ** test: set_grammar_start_unresolved_raises
 def test_set_grammar_start_unresolved_raises() -> None:
@@ -445,7 +431,6 @@ def test_set_grammar_start_unresolved_raises() -> None:
         )
     assert raised.value.error_code == a.error.GRAMMAR_START_NOT_FOUND_ID
     grammars.save.assert_not_called()
-
 
 # ** test: set_grammar_parent_ids_dropping_start_raises
 def test_set_grammar_parent_ids_dropping_start_raises() -> None:
@@ -473,7 +458,6 @@ def test_set_grammar_parent_ids_dropping_start_raises() -> None:
     assert raised.value.error_code == a.error.GRAMMAR_START_NOT_FOUND_ID
     grammars.save.assert_not_called()
 
-
 # ** test: remove_grammar_still_listed_as_parent_raises
 def test_remove_grammar_still_listed_as_parent_raises() -> None:
     '''
@@ -499,7 +483,6 @@ def test_remove_grammar_still_listed_as_parent_raises() -> None:
     assert raised.value.error_code == a.error.GRAMMAR_STILL_REFERENCED_ID
     grammars.delete.assert_not_called()
 
-
 # ** test: remove_grammar_still_referenced_by_token_raises
 def test_remove_grammar_still_referenced_by_token_raises() -> None:
     '''
@@ -523,7 +506,6 @@ def test_remove_grammar_still_referenced_by_token_raises() -> None:
         )
     assert raised.value.error_code == a.error.GRAMMAR_STILL_REFERENCED_ID
     grammars.delete.assert_not_called()
-
 
 # ** test: remove_grammar_still_referenced_by_production_raises
 def test_remove_grammar_still_referenced_by_production_raises() -> None:
@@ -549,7 +531,6 @@ def test_remove_grammar_still_referenced_by_production_raises() -> None:
     assert raised.value.error_code == a.error.GRAMMAR_STILL_REFERENCED_ID
     grammars.delete.assert_not_called()
 
-
 # ** test: remove_grammar_unreferenced_returns_id
 def test_remove_grammar_unreferenced_returns_id() -> None:
     '''
@@ -573,7 +554,6 @@ def test_remove_grammar_unreferenced_returns_id() -> None:
     assert result == 'arithmetic'
     grammars.delete.assert_called_once_with('arithmetic')
 
-
 # ** test: event_modules_do_not_import_repos_or_ply
 def test_event_modules_do_not_import_repos_or_ply() -> None:
     '''
@@ -589,7 +569,6 @@ def test_event_modules_do_not_import_repos_or_ply() -> None:
     for module in (token_events, production_events, grammar_events):
         assert 'ply' not in module.__dict__
         assert not any(name.startswith('tiferet_ly.repos') for name in module.__dict__)
-
 
 # ** test: shrinking_writers_import_grammar_rule_selector
 def test_shrinking_writers_import_grammar_rule_selector() -> None:
