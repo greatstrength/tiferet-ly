@@ -283,20 +283,7 @@ class PlyReader:
             for name, compiled, action in walk:
                 if compiled.match(t.lexer.lexdata, t.lexpos) is not None:
                     t.type = name
-                    result = action(t)
-
-                    # Keep PLY's unknown-type message naming t_<rule>, not the dispatcher.
-                    if result and result.type not in t.lexer.lextokens_all:
-                        raise lex.LexError(
-                            "%s:%d: Rule '%s' returned an unknown token type '%s'" % (
-                                action.__code__.co_filename,
-                                action.__code__.co_firstlineno,
-                                action.__name__,
-                                result.type,
-                            ),
-                            t.lexer.lexdata[t.lexer.lexmatch.end():],
-                        )
-                    return result
+                    return action(t)
             return t
 
         # Name the dispatcher clear of t_error, t_ignore, t_eof, and t_<selected name>.
