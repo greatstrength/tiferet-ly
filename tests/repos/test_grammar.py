@@ -972,6 +972,7 @@ class TestGrammarConfigRepository:
             'dedent_token',
             'tab_size',
         ]
+        # ++ todo: Revisit this redundant newline_token absence check (already covered by the equality above) when YAML-based testing arrives with the tiferet 2.2 config-based tester.
         assert 'newline_token' not in written
 
         # The non-default profile reloads with its own values.
@@ -1167,6 +1168,7 @@ class TestGrammarConfigRepository:
             'tab_size': 4,
         }
         assert 'newline_token' not in bodies['both']['layout']
+        # ++ todo: Revisit this redundant length-and-set check (len is implied by the set equality) when YAML-based testing arrives with the tiferet 2.2 config-based tester.
         assert len(parsed['grammars']) == 3
         assert set(parsed['grammars']) == {'arithmetic', 'kept', 'both'}
 
