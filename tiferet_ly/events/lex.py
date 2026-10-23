@@ -13,6 +13,7 @@ from ..interfaces.lexer import LexerService
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate
 from ..mappers.token import TokenRuleAggregate
+from .settings import parameters_required
 
 # *** events
 
@@ -38,7 +39,7 @@ class LexText(DomainEvent):
         self.lexer_service = lexer_service
 
     # * method: execute
-    @DomainEvent.parameters_required(['grammar_id', 'text', 'tokens', 'grammars'])
+    @parameters_required(['grammar_id', 'text', 'tokens', 'grammars'])
     def execute(self,
             grammar_id: str,
             text: str,

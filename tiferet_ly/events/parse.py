@@ -14,6 +14,7 @@ from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate
 from ..mappers.production import ProductionRuleAggregate
 from ..mappers.token import TokenRuleAggregate
+from .settings import parameters_required
 
 # *** events
 
@@ -39,7 +40,7 @@ class ParseText(DomainEvent):
         self.parser_service = parser_service
 
     # * method: execute
-    @DomainEvent.parameters_required([
+    @parameters_required([
         'grammar_id',
         'tokens',
         'productions',

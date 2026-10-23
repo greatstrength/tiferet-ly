@@ -193,6 +193,46 @@ def test_lex_text_still_requires_text(text) -> None:
     assert 'rewrites' not in str(raised.value)
     lexer_service.tokenize.assert_not_called()
 
+# ** test: lex_text_checks_a_positional_call
+def test_lex_text_checks_a_positional_call() -> None:
+    '''
+    Test that a live positional LexText.execute call passes the
+    required-parameter check and reaches the service.
+    '''
+
+    # Execute LexText positionally.
+    tokens, _productions, grammars = catalogues()
+    lexer_service = Mock()
+    result = LexText(lexer_service).execute('arith', '1', tokens, grammars)
+
+    # Assert the service result and the same positional slots.
+    assert result is lexer_service.tokenize.return_value
+    lexer_service.tokenize.assert_called_once_with(
+        'arith',
+        grammars,
+        tokens,
+        '1',
+        rewrites=None,
+    )
+
+# ** test: lex_text_positional_call_still_requires_text
+@pytest.mark.parametrize('text', [None, ''])
+def test_lex_text_positional_call_still_requires_text(text) -> None:
+    '''
+    Test that a positional LexText.execute call with a None or blank text
+    still fails the required-parameter check before the service.
+    '''
+
+    # Execute LexText positionally and expect the required-parameter failure.
+    tokens, _productions, grammars = catalogues()
+    lexer_service = Mock()
+    with pytest.raises(TiferetError) as raised:
+        LexText(lexer_service).execute('arith', text, tokens, grammars)
+
+    # Assert the failure names text and the service was not called.
+    assert 'text' in str(raised.value)
+    lexer_service.tokenize.assert_not_called()
+
 # ** test: parse_text_keeps_text_second_positionally
 def test_parse_text_keeps_text_second_positionally() -> None:
     '''
@@ -227,6 +267,32 @@ def test_parse_text_keeps_text_second_positionally() -> None:
     )
 
     # Assert text stays in the positional slot.
+    parser_service.parse.assert_called_once_with(
+        'arith',
+        grammars,
+        tokens,
+        productions,
+        '1',
+        lexemes=None,
+        rewrites=None,
+    )
+
+# ** test: parse_text_checks_a_positional_call
+def test_parse_text_checks_a_positional_call() -> None:
+    '''
+    Test that a live positional ParseText.execute call passes the
+    required-parameter check and reaches the service.
+    '''
+
+    # Execute ParseText positionally.
+    tokens, productions, grammars = catalogues()
+    parser_service = Mock()
+    result = ParseText(parser_service).execute(
+        'arith', '1', tokens, productions, grammars,
+    )
+
+    # Assert the service result and the same positional slots.
+    assert result is parser_service.parse.return_value
     parser_service.parse.assert_called_once_with(
         'arith',
         grammars,
