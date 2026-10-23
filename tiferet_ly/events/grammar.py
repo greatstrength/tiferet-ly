@@ -6,7 +6,7 @@
 from typing import Any, Dict, List, Optional
 
 # ** infra
-from tiferet import a as tiferet_a
+from tiferet.events.core import a as tiferet_a
 from tiferet.events.core import DomainEvent
 
 # ** app

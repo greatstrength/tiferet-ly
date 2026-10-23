@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 from pydantic import ValidationError
-from tiferet import a as tiferet_a
+from tiferet.events.core import a as tiferet_a
 from tiferet.assets.core import TiferetError
 from tiferet.events.core import DomainEvent
 
@@ -29,9 +29,9 @@ from tiferet_ly.events.grammar import (
     SetGrammarStart,
 )
 from tiferet_ly.mappers.grammar import GrammarAggregate
-from tiferet_ly.repos.grammar import GrammarConfigRepository
 from tiferet_ly.mappers.production import SimpleProductionRuleAggregate
 from tiferet_ly.mappers.token import SimpleTokenRuleAggregate
+from tiferet_ly.repos.grammar import GrammarConfigRepository
 
 # *** functions
 
