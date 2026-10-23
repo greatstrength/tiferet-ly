@@ -6,12 +6,15 @@
 import ast
 import inspect
 from pathlib import Path
+from typing import Any
 
-# ** app
+# ** infra
 from tiferet import (
     Aggregate,
     use_tester,
 )
+
+# ** app
 from tiferet_ly.domain import lexeme as lexeme_domain
 from tiferet_ly.domain.lexeme import Lexeme
 from tiferet_ly.mappers import lexeme as lexeme_mappers
@@ -128,3 +131,61 @@ class TestLexemeAggregate:
             not base.__module__.startswith('ply')
             for base in type(lexeme).__mro__
         )
+
+    # * test: synthesize_constructs_directly
+    def test_synthesize_constructs_directly(self, test_ctx, session):
+        '''
+        Build a lexeme aggregate with no token and no payload.
+
+        :param test_ctx: The bound aggregate tester context.
+        :type test_ctx: AggregateTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The factory is static, ordered type, lineno, lexpos, value, and only value defaults.
+        assert isinstance(LexemeAggregate.__dict__['synthesize'], staticmethod)
+        signature = inspect.signature(LexemeAggregate.synthesize)
+        assert list(signature.parameters) == ['type', 'lineno', 'lexpos', 'value']
+        assert [
+            parameter.annotation
+            for parameter in signature.parameters.values()
+        ] == [str, int, int, Any | None]
+        assert signature.parameters['value'].default is None
+        assert 'from_ply_token' not in LexemeAggregate.__dict__
+
+        # The positional call binds 3 as lineno and 12 as lexpos, with no payload.
+        lexeme = LexemeAggregate.synthesize('INDENT', 3, 12)
+        assert type(lexeme) is LexemeAggregate
+        assert lexeme.type == 'INDENT'
+        assert lexeme.value is None
+        assert lexeme.lineno == 3
+        assert isinstance(lexeme.lineno, int)
+        assert lexeme.lexpos == 12
+        assert isinstance(lexeme.lexpos, int)
+        assert lexeme.__class__.__module__ == 'tiferet_ly.mappers.lexeme'
+        assert all(
+            not base.__module__.startswith('ply')
+            for base in type(lexeme).__mro__
+        )
+
+    # * test: synthesize_keeps_explicit_payload
+    def test_synthesize_keeps_explicit_payload(self, test_ctx, session):
+        '''
+        Store an explicit payload as given, without coercing it to text.
+
+        :param test_ctx: The bound aggregate tester context.
+        :type test_ctx: AggregateTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The keyword payload is stored as an int, not as '3'.
+        lexeme = LexemeAggregate.synthesize('NUMBER', lineno=1, lexpos=0, value=3)
+        assert type(lexeme) is LexemeAggregate
+        assert lexeme.type == 'NUMBER'
+        assert lexeme.lineno == 1
+        assert lexeme.lexpos == 0
+        assert lexeme.value == 3
+        assert type(lexeme.value) is int
+        assert lexeme.value != '3'

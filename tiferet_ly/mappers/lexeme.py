@@ -2,8 +2,13 @@
 
 # *** imports
 
-# ** app
+# ** core
+from typing import Any
+
+# ** infra
 from tiferet import Aggregate
+
+# ** app
 from tiferet_ly.domain.lexeme import Lexeme
 
 # *** mappers
@@ -11,9 +16,11 @@ from tiferet_ly.domain.lexeme import Lexeme
 # ** mapper: lexeme_aggregate
 class LexemeAggregate(Lexeme, Aggregate):
     '''
-    The lexeme a reader builds from a recognized word's span.
+    The lexeme a reader builds from a recognized word's span, or from a
+    span the reader supplies itself.
 
-    ``new`` is the only constructor the reader may use. It returns this
+    ``new`` builds from a recognized word. ``synthesize`` builds a span
+    that was not copied from a recognized token. Both return this
     aggregate, not a PLY token.
     '''
 
@@ -41,6 +48,37 @@ class LexemeAggregate(Lexeme, Aggregate):
         '''
 
         # Build the aggregate from the four span fields.
+        return LexemeAggregate(
+            type=type,
+            value=value,
+            lineno=lineno,
+            lexpos=lexpos,
+        )
+
+    # * method: synthesize (static)
+    @staticmethod
+    def synthesize(
+            type: str,
+            lineno: int,
+            lexpos: int,
+            value: Any | None = None,
+        ) -> 'LexemeAggregate':
+        '''
+        Construct a lexeme that was not copied from a recognized token.
+
+        :param type: The synthetic token type name.
+        :type type: str
+        :param lineno: The source line the synthetic lexeme is attributed to.
+        :type lineno: int
+        :param lexpos: The source character offset the synthetic lexeme is attributed to.
+        :type lexpos: int
+        :param value: The payload carried by the synthetic lexeme. Defaults to None.
+        :type value: Any | None
+        :return: The lexeme aggregate.
+        :rtype: LexemeAggregate
+        '''
+
+        # Build the aggregate from the supplied span. Do not require a token.
         return LexemeAggregate(
             type=type,
             value=value,
