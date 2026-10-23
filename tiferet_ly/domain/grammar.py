@@ -19,7 +19,7 @@ class Grammar(DomainObject):
     '''
     A declared grammar's own composition structure: the other grammars it
     extends (parent_ids) and its start symbol, plus the grammar-own facts
-    it carries about itself (ignore and layout). Deliberately lean — a
+    it carries about itself (ignore and layout). Deliberately lean - a
     Grammar does not hold the token/production rules declared under it
     (each rule names its one owning grammar directly via grammar_id, not
     the other way around), and performs no validation beyond whatever
