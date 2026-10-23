@@ -289,6 +289,41 @@ def test_tokenize_without_layout_is_unaffected() -> None:
     # Assert no INDENT/DEDENT was injected; the raw token sequence passes through.
     assert [lexeme.type for lexeme in result] == ['BLOCK', 'IDENTIFIER', 'COLON', 'NEWLINE', 'IDENTIFIER']
 
+# ** test: tokenize_passes_declared_layout_through_unwrapped
+def test_tokenize_passes_declared_layout_through_unwrapped(monkeypatch) -> None:
+    '''
+    Test that tokenize hands the grammar's own layout object to
+    LayoutFilter.apply as-is, without wrapping or copying it.
+
+    :param monkeypatch: The pytest monkeypatch fixture.
+    :type monkeypatch: pytest.MonkeyPatch
+    '''
+
+    # Declare a layout profile on the target grammar.
+    from tiferet_ly.domain.layout import LayoutProfile
+    from tiferet_ly.utils import lex as lex_module
+
+    target = grammar()
+    target.ignore = ' '
+    target.layout = LayoutProfile(indent_token='INDENT', dedent_token='DEDENT')
+    tokens = [
+        ComplexTokenRuleAggregate(name='IDENTIFIER', grammar_id='arith', pattern=r'[a-zA-Z_]+', action='return t'),
+    ]
+
+    # Capture the profile the filter receives.
+    received = []
+
+    def capture(lexemes, profile, text):
+        received.append(profile)
+        return lexemes
+
+    monkeypatch.setattr(lex_module.LayoutFilter, 'apply', staticmethod(capture))
+    PlyLexer().tokenize('arith', [target], tokens, 'x y')
+
+    # The filter received the very object the grammar declared.
+    assert len(received) == 1
+    assert received[0] is target.layout
+
 
 # ** test: tokenize_with_synthetic_rule_present_still_lexes
 def test_tokenize_with_synthetic_rule_present_still_lexes() -> None:
