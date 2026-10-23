@@ -625,6 +625,7 @@ class TestPlyParser:
                 for name, parameter in signature.parameters.items()
             ]
 
+        # The interface and implementation agree on every parameter shape.
         assert shape(interface) == shape(implementation)
 
         # A positional text call still reads. The sixth positional argument is rewrites.

@@ -211,7 +211,7 @@ class PlyParser(PlyReader, ParserService):
             rewrites=rewrites,
         )
 
-        # The parser token list is the selected token order. Forward rewrites.
+        # The parser token list is the selected token order. The text path forwards rewrites.
         if lexemes is None:
             installed_tokens = PlyReader.install_tokens(
                 grammar,
