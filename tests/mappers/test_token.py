@@ -265,3 +265,29 @@ def test_token_rule_aggregate_mutations() -> None:
     assert complex_rule.action == 't.value = int(t.value)\nreturn t'
     assert isinstance(simple, TokenRuleAggregate)
     assert isinstance(complex_rule, TokenRuleAggregate)
+
+# ** test: synthetic_token_rule_aggregate_has_no_pattern_mutator
+def test_synthetic_token_rule_aggregate_has_no_pattern_mutator() -> None:
+    '''
+    Test that SyntheticTokenRuleAggregate does not inherit TokenRuleAggregate
+    or set_pattern, keeps the shared name and grammar mutators, and that the
+    patterned aggregates still do.
+    '''
+
+    # The synthetic aggregate is outside the TokenRuleAggregate hierarchy.
+    assert TokenRuleAggregate not in SyntheticTokenRuleAggregate.__mro__
+    assert not hasattr(SyntheticTokenRuleAggregate, 'set_pattern')
+    assert not hasattr(SyntheticTokenRuleAggregate, 'set_action')
+
+    # It keeps the shared name and grammar mutators.
+    synthetic = SyntheticTokenRuleAggregate(name='INDENT', grammar_id='core')
+    synthetic.rename('OPEN_BLOCK')
+    synthetic.reassign_grammar('domain_extra')
+    assert synthetic.name == 'OPEN_BLOCK'
+    assert synthetic.grammar_id == 'domain_extra'
+
+    # The patterned aggregates still inherit set_pattern from TokenRuleAggregate.
+    assert isinstance(SIMPLE_CORE, TokenRuleAggregate)
+    assert isinstance(COMPLEX_CORE, TokenRuleAggregate)
+    assert hasattr(SimpleTokenRuleAggregate, 'set_pattern')
+    assert hasattr(ComplexTokenRuleAggregate, 'set_pattern')

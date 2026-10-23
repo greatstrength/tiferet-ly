@@ -5,8 +5,10 @@
 # ** core
 from typing import Any, Dict, List, Optional, Union
 
-# ** app
+# ** infra
 from tiferet.repos.core import ConfigurationRepository
+
+# ** app
 from ..interfaces.token import TokenService
 from ..mappers.core import (
     expand_keyed_entries,
@@ -15,6 +17,7 @@ from ..mappers.core import (
 from ..mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
     TokenRuleConfigObject,
 )
 
@@ -104,7 +107,7 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         return self._find_index(entries, name, grammar_id) is not None
 
     # * method: get
-    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]:
+    def get(self, name: str, grammar_id: str) -> Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]:
         '''
         Retrieve a token rule aggregate by name and grammar_id.
 
@@ -113,7 +116,7 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         :param grammar_id: The grammar the rule is declared under.
         :type grammar_id: str
         :return: The token rule aggregate, or None if not found.
-        :rtype: Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]
+        :rtype: Optional[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]
         '''
 
         # Load expanded entries and locate the composite key.
@@ -128,12 +131,12 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         return TokenRuleConfigObject.model_validate(entries[index]).map()
 
     # * method: list
-    def list(self) -> List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]:
+    def list(self) -> List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]:
         '''
         List every token rule aggregate unfiltered, in declared order.
 
         :return: All stored token rule aggregates.
-        :rtype: List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]]
+        :rtype: List[Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]]
         '''
 
         # Load expanded entries and map each to a token rule aggregate.
@@ -144,7 +147,7 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         ]
 
     # * method: save
-    def save(self, token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]) -> None:
+    def save(self, token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]) -> None:
         '''
         Persist a token rule aggregate.
 
@@ -152,7 +155,7 @@ class TokenConfigRepository(TokenService, ConfigurationRepository):
         list position; otherwise appends at the end.
 
         :param token: The token rule aggregate to persist.
-        :type token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate]
+        :type token: Union[SimpleTokenRuleAggregate, ComplexTokenRuleAggregate, SyntheticTokenRuleAggregate]
         :return: None
         :rtype: None
         '''

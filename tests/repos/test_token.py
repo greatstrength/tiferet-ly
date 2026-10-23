@@ -9,11 +9,19 @@ from typing import List
 # ** infra
 import pytest
 import yaml
+from tiferet.events.core import DomainEvent
 
 # ** app
+from tiferet_ly.events.token import (
+    AddToken,
+    GetToken,
+    ListTokens,
+    RemoveToken,
+)
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 from tiferet_ly.repos.token import TokenConfigRepository
 
@@ -193,3 +201,80 @@ def test_int_token_repo_serialized_yaml_shape(token_repo: TokenConfigRepository)
             },
         ],
     }
+
+# ** test_int: token_repo_synthetic_add_get_and_yaml_shape
+def test_int_token_repo_synthetic_add_get_and_yaml_shape(token_repo: TokenConfigRepository) -> None:
+    '''
+    AddToken with no pattern or action persists a synthetic entry whose
+    YAML body is grammar_id only; GetToken and get read it back as synthetic,
+    and a second save of the pair replaces it in place.
+    '''
+
+    # Add a simple token, then a synthetic token, then another simple token.
+    deps = {'token_service': token_repo}
+    DomainEvent.handle(AddToken, dependencies=deps, name='PLUS', grammar_id='core', pattern=r'\+')
+    DomainEvent.handle(AddToken, dependencies=deps, name='INDENT', grammar_id='core')
+    DomainEvent.handle(AddToken, dependencies=deps, name='MINUS', grammar_id='core', pattern='-')
+
+    # GetToken and TokenService.get both read back a synthetic aggregate.
+    for loaded in (
+        DomainEvent.handle(GetToken, dependencies=deps, name='INDENT', grammar_id='core'),
+        token_repo.get('INDENT', 'core'),
+    ):
+        assert isinstance(loaded, SyntheticTokenRuleAggregate)
+        assert loaded.name == 'INDENT'
+        assert loaded.grammar_id == 'core'
+        assert 'pattern' not in loaded.model_dump()
+        assert 'action' not in loaded.model_dump()
+
+    # The persisted body carries grammar_id and no pattern, action, or discriminator.
+    raw = yaml.safe_load(Path(token_repo.config_file).read_text(encoding='utf-8'))
+    assert raw['tokens'][1] == {
+        'INDENT': {
+            'grammar_id': 'core',
+        },
+    }
+
+    # A second save of the same pair replaces the entry without moving it.
+    token_repo.save(SyntheticTokenRuleAggregate(name='INDENT', grammar_id='core'))
+    assert names(token_repo.list()) == ['PLUS', 'INDENT', 'MINUS']
+
+# ** test_int: token_repo_synthetic_list_remove_and_re_add
+def test_int_token_repo_synthetic_list_remove_and_re_add(token_repo: TokenConfigRepository) -> None:
+    '''
+    ListTokens includes a synthetic token in declared order; RemoveToken
+    deletes it by pair, and AddToken can then re-add the pair as a
+    patterned rule.
+    '''
+
+    # Add a simple token, then a synthetic token after it.
+    deps = {'token_service': token_repo}
+    DomainEvent.handle(AddToken, dependencies=deps, name='PLUS', grammar_id='core', pattern=r'\+')
+    DomainEvent.handle(AddToken, dependencies=deps, name='INDENT', grammar_id='core')
+
+    # ListTokens includes the synthetic token after the existing one.
+    listed = DomainEvent.handle(ListTokens, dependencies=deps)
+    assert names(listed) == ['PLUS', 'INDENT']
+    assert isinstance(listed[1], SyntheticTokenRuleAggregate)
+
+    # RemoveToken deletes the synthetic token by pair alone.
+    DomainEvent.handle(RemoveToken, dependencies=deps, name='INDENT', grammar_id='core')
+    assert token_repo.get('INDENT', 'core') is None
+
+    # AddToken of a simple rule under the same pair returns that class.
+    simple = DomainEvent.handle(AddToken, dependencies=deps, name='INDENT', grammar_id='core', pattern=r'\t')
+    assert isinstance(simple, SimpleTokenRuleAggregate)
+    assert isinstance(token_repo.get('INDENT', 'core'), SimpleTokenRuleAggregate)
+
+    # Remove again and re-add as a complex rule under the same pair.
+    DomainEvent.handle(RemoveToken, dependencies=deps, name='INDENT', grammar_id='core')
+    complex_rule = DomainEvent.handle(
+        AddToken,
+        dependencies=deps,
+        name='INDENT',
+        grammar_id='core',
+        pattern=r'\t',
+        action='return t',
+    )
+    assert isinstance(complex_rule, ComplexTokenRuleAggregate)
+    assert isinstance(token_repo.get('INDENT', 'core'), ComplexTokenRuleAggregate)

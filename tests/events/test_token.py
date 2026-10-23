@@ -7,10 +7,12 @@ from unittest.mock import Mock
 
 # ** infra
 import pytest
+from pydantic import ValidationError
+from tiferet.assets.core import TiferetError
+from tiferet.assets.error import COMMAND_PARAMETER_REQUIRED_ID
+from tiferet.events.core import DomainEvent
 
 # ** app
-from tiferet.assets.core import TiferetError
-from tiferet.events.core import DomainEvent
 from tiferet_ly import assets as a
 from tiferet_ly.events.token import (
     AddToken,
@@ -26,6 +28,7 @@ from tiferet_ly.events.token import (
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 
 # *** functions
@@ -85,6 +88,26 @@ def complex_token(
         action=action,
     )
 
+# ** function: synthetic_token
+def synthetic_token(
+        name: str = 'INDENT',
+        grammar_id: str = 'arithmetic') -> SyntheticTokenRuleAggregate:
+    '''
+    Construct a synthetic token aggregate for event tests.
+
+    :param name: The token name.
+    :type name: str
+    :param grammar_id: The owning grammar id.
+    :type grammar_id: str
+    :return: The constructed synthetic token.
+    :rtype: SyntheticTokenRuleAggregate
+    '''
+
+    # Construct a synthetic token under the given grammar.
+    return SyntheticTokenRuleAggregate(
+        name=name,
+        grammar_id=grammar_id,
+    )
 
 # ** function: token_service
 def token_service(**attrs) -> Mock:
@@ -184,6 +207,107 @@ def test_add_token_with_action_is_complex() -> None:
     assert isinstance(token, ComplexTokenRuleAggregate)
     assert token.action == 't.value = int(t.value)'
 
+# ** test: add_token_with_no_pattern_or_action_is_synthetic
+def test_add_token_with_no_pattern_or_action_is_synthetic() -> None:
+    '''
+    Test that AddToken with pattern and action omitted or None constructs
+    and saves a synthetic aggregate without requiring the grammar.
+    '''
+
+    # Handle AddToken with both fields omitted, then with both explicitly None.
+    for absent in ({}, {'pattern': None, 'action': None}):
+        service = token_service(exists=Mock(return_value=False))
+        token = DomainEvent.handle(
+            AddToken,
+            dependencies={'token_service': service},
+            name='INDENT',
+            grammar_id='missing',
+            **absent,
+        )
+
+        # Assert a synthetic token is saved once under the missing grammar.
+        assert isinstance(token, SyntheticTokenRuleAggregate)
+        assert token.name == 'INDENT'
+        assert token.grammar_id == 'missing'
+        service.save.assert_called_once_with(token)
+
+# ** test: add_token_blank_pattern_is_present
+def test_add_token_blank_pattern_is_present() -> None:
+    '''
+    Test that AddToken treats a blank pattern or action as present, not as
+    absence: a blank pattern alone is simple and a blank action is complex.
+    '''
+
+    # Handle AddToken with a blank pattern and no action.
+    service = token_service(exists=Mock(return_value=False))
+    simple = DomainEvent.handle(
+        AddToken,
+        dependencies={'token_service': service},
+        name='EMPTY',
+        grammar_id='arithmetic',
+        pattern='',
+    )
+
+    # Assert the blank pattern yields a simple aggregate carrying it.
+    assert isinstance(simple, SimpleTokenRuleAggregate)
+    assert simple.pattern == ''
+
+    # Handle AddToken with a pattern and a blank action.
+    complex_rule = DomainEvent.handle(
+        AddToken,
+        dependencies={'token_service': service},
+        name='NUMBER',
+        grammar_id='arithmetic',
+        pattern=r'\d+',
+        action='',
+    )
+
+    # Assert the blank action yields a complex aggregate.
+    assert isinstance(complex_rule, ComplexTokenRuleAggregate)
+    assert complex_rule.action == ''
+
+# ** test: add_token_action_without_pattern_raises
+def test_add_token_action_without_pattern_raises() -> None:
+    '''
+    Test that AddToken with an action and no pattern raises ValidationError
+    from complex construction and does not save.
+    '''
+
+    # Handle AddToken with an action, including a blank one, and no pattern.
+    for action in ('t.value = int(t.value)', ''):
+        service = token_service(exists=Mock(return_value=False))
+
+        # Assert domain construction fails and save is not called.
+        with pytest.raises(ValidationError):
+            DomainEvent.handle(
+                AddToken,
+                dependencies={'token_service': service},
+                name='NUMBER',
+                grammar_id='arithmetic',
+                action=action,
+            )
+        service.save.assert_not_called()
+
+# ** test: add_token_duplicate_synthetic_raises
+def test_add_token_duplicate_synthetic_raises() -> None:
+    '''
+    Test that AddToken of a synthetic token on an existing pair raises
+    TOKEN_ALREADY_EXISTS before construction.
+    '''
+
+    # Handle a synthetic AddToken against a service that already has the pair.
+    service = token_service(exists=Mock(return_value=True))
+
+    # Assert the already-exists error and that save is not called.
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            AddToken,
+            dependencies={'token_service': service},
+            name='INDENT',
+            grammar_id='arithmetic',
+        )
+    assert raised.value.error_code == a.error.TOKEN_ALREADY_EXISTS_ID
+    service.save.assert_not_called()
 
 # ** test: get_token_raises_when_missing
 def test_get_token_raises_when_missing() -> None:
@@ -272,6 +396,70 @@ def test_reassign_token_grammar_rejects_existing_pair() -> None:
     assert raised.value.error_code == a.error.TOKEN_ALREADY_EXISTS_ID
     service.save.assert_not_called()
 
+# ** test: rename_and_reassign_synthetic_token_stay_synthetic
+def test_rename_and_reassign_synthetic_token_stay_synthetic() -> None:
+    '''
+    Test that RenameToken and ReassignTokenGrammar on a synthetic token
+    return and save a synthetic aggregate with no pattern or action.
+    '''
+
+    # Handle RenameToken against a synthetic token.
+    token = synthetic_token()
+    service = token_service(
+        get=Mock(return_value=token),
+        exists=Mock(return_value=False),
+    )
+    renamed = DomainEvent.handle(
+        RenameToken,
+        dependencies={'token_service': service},
+        name='INDENT',
+        grammar_id='arithmetic',
+        new_name='OPEN_BLOCK',
+    )
+
+    # Assert the renamed token is still synthetic and was saved.
+    assert isinstance(renamed, SyntheticTokenRuleAggregate)
+    assert renamed.name == 'OPEN_BLOCK'
+    service.save.assert_called_once_with(token)
+
+    # Handle ReassignTokenGrammar against the same synthetic token.
+    reassigned = DomainEvent.handle(
+        ReassignTokenGrammar,
+        dependencies={'token_service': service},
+        name='OPEN_BLOCK',
+        grammar_id='arithmetic',
+        new_grammar_id='algebra',
+    )
+
+    # Assert the reassigned token is still synthetic with no pattern or action.
+    assert isinstance(reassigned, SyntheticTokenRuleAggregate)
+    assert reassigned.grammar_id == 'algebra'
+    assert 'pattern' not in reassigned.model_dump()
+    assert 'action' not in reassigned.model_dump()
+
+# ** test: rename_synthetic_token_rejects_existing_pair
+def test_rename_synthetic_token_rejects_existing_pair() -> None:
+    '''
+    Test that RenameToken of a synthetic token refuses an existing pair.
+    '''
+
+    # Handle RenameToken of a synthetic token toward an existing pair.
+    service = token_service(
+        get=Mock(return_value=synthetic_token()),
+        exists=Mock(return_value=True),
+    )
+
+    # Assert the already-exists error and that save is not called.
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            RenameToken,
+            dependencies={'token_service': service},
+            name='INDENT',
+            grammar_id='arithmetic',
+            new_name='DEDENT',
+        )
+    assert raised.value.error_code == a.error.TOKEN_ALREADY_EXISTS_ID
+    service.save.assert_not_called()
 
 # ** test: set_token_pattern_updates_and_saves
 def test_set_token_pattern_updates_and_saves() -> None:
@@ -294,6 +482,100 @@ def test_set_token_pattern_updates_and_saves() -> None:
     assert result.pattern == r'\+\+'
     service.save.assert_called_once_with(token)
 
+# ** test: set_token_pattern_on_complex_saves
+def test_set_token_pattern_on_complex_saves() -> None:
+    '''
+    Test that SetTokenPattern on a Complex aggregate updates and saves.
+    '''
+
+    # Handle SetTokenPattern against an existing complex token.
+    token = complex_token()
+    service = token_service(get=Mock(return_value=token))
+    result = DomainEvent.handle(
+        SetTokenPattern,
+        dependencies={'token_service': service},
+        name='NUMBER',
+        grammar_id='arithmetic',
+        pattern=r'\d+\.\d+',
+    )
+
+    # Assert the pattern changed and the token was saved.
+    assert isinstance(result, ComplexTokenRuleAggregate)
+    assert result.pattern == r'\d+\.\d+'
+    service.save.assert_called_once_with(token)
+
+# ** test: set_token_pattern_missing_or_blank_pattern_raises
+def test_set_token_pattern_missing_or_blank_pattern_raises() -> None:
+    '''
+    Test that SetTokenPattern with a None or blank pattern fails as a
+    missing required parameter and does not save.
+    '''
+
+    # Handle SetTokenPattern with a None pattern, then a blank one.
+    for pattern in (None, '', '   '):
+        service = token_service(get=Mock(return_value=simple_token()))
+
+        # Assert the required-parameter error and that save is not called.
+        with pytest.raises(TiferetError) as raised:
+            DomainEvent.handle(
+                SetTokenPattern,
+                dependencies={'token_service': service},
+                name='PLUS',
+                grammar_id='arithmetic',
+                pattern=pattern,
+            )
+        assert raised.value.error_code == COMMAND_PARAMETER_REQUIRED_ID
+        service.save.assert_not_called()
+
+# ** test: set_token_pattern_missing_token_raises
+def test_set_token_pattern_missing_token_raises() -> None:
+    '''
+    Test that SetTokenPattern on a missing token raises TOKEN_NOT_FOUND.
+    '''
+
+    # Handle SetTokenPattern against an empty service.
+    service = token_service(get=Mock(return_value=None))
+
+    # Assert the not-found error and that save is not called.
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            SetTokenPattern,
+            dependencies={'token_service': service},
+            name='INDENT',
+            grammar_id='arithmetic',
+            pattern=r'\t',
+        )
+    assert raised.value.error_code == a.error.TOKEN_NOT_FOUND_ID
+    service.save.assert_not_called()
+
+# ** test: set_token_pattern_on_synthetic_raises
+def test_set_token_pattern_on_synthetic_raises() -> None:
+    '''
+    Test that SetTokenPattern on a synthetic token raises
+    TOKEN_PATTERN_NOT_SUPPORTED, does not save, and leaves it synthetic.
+    '''
+
+    # Handle SetTokenPattern against a synthetic token.
+    token = synthetic_token()
+    service = token_service(get=Mock(return_value=token))
+
+    # Assert the pattern-not-supported error, message, and that save is not called.
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            SetTokenPattern,
+            dependencies={'token_service': service},
+            name='INDENT',
+            grammar_id='arithmetic',
+            pattern=r'\t',
+        )
+    assert raised.value.error_code == a.error.TOKEN_PATTERN_NOT_SUPPORTED_ID
+    assert a.error.TOKEN_PATTERN_NOT_SUPPORTED_ID == 'TOKEN_PATTERN_NOT_SUPPORTED'
+    assert 'Token pattern is not supported: INDENT under arithmetic.' in str(raised.value)
+    service.save.assert_not_called()
+
+    # Assert the stored token is still synthetic with no pattern field.
+    assert isinstance(token, SyntheticTokenRuleAggregate)
+    assert 'pattern' not in token.model_dump()
 
 # ** test: set_token_action_on_simple_raises
 def test_set_token_action_on_simple_raises() -> None:
@@ -316,6 +598,29 @@ def test_set_token_action_on_simple_raises() -> None:
     assert raised.value.error_code == a.error.TOKEN_ACTION_NOT_SUPPORTED_ID
     service.save.assert_not_called()
 
+# ** test: set_token_action_on_synthetic_raises
+def test_set_token_action_on_synthetic_raises() -> None:
+    '''
+    Test that SetTokenAction on a synthetic token raises
+    TOKEN_ACTION_NOT_SUPPORTED, does not save, and leaves it synthetic.
+    '''
+
+    # Handle SetTokenAction against a synthetic token.
+    token = synthetic_token()
+    service = token_service(get=Mock(return_value=token))
+
+    # Assert the action-not-supported error and that save is not called.
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            SetTokenAction,
+            dependencies={'token_service': service},
+            name='INDENT',
+            grammar_id='arithmetic',
+            action='return t',
+        )
+    assert raised.value.error_code == a.error.TOKEN_ACTION_NOT_SUPPORTED_ID
+    service.save.assert_not_called()
+    assert isinstance(token, SyntheticTokenRuleAggregate)
 
 # ** test: set_token_action_on_complex_saves
 def test_set_token_action_on_complex_saves() -> None:
