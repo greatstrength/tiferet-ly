@@ -8,18 +8,20 @@ from typing import Any
 
 # ** infra
 import ply.yacc as yacc
+from tiferet.interfaces.core import ServiceError
 
 # ** app
-from tiferet.interfaces.core import ServiceError
 from tiferet_ly.assets.reader import (
     ACTION_EXECUTION_FAILED_ID,
     PARSE_ERROR_ID,
+    PARSE_INPUT_INVALID_ID,
     READER_BUILD_FAILED_ID,
 )
 from tiferet_ly.interfaces.parser import ParserService
 from tiferet_ly.utils import core as reader_core
 from tiferet_ly.utils.core import PlyReader
 from tiferet_ly.utils.grammar import GrammarRuleSelector
+from tiferet_ly.utils.stream import LexemeStream
 from tiferet_ly.utils.translation import RuleTranslator
 
 # *** classes
@@ -136,24 +138,26 @@ class PlyParser(PlyReader, ParserService):
     def parse(
             self,
             grammar_id: str,
-            text: str,
+            text: str | None,
             tokens: list,
             productions: list,
             grammars: list,
             rewrites: dict | None = None,
+            lexemes: list | None = None,
         ) -> Any:
         '''
-        Read declared text for one grammar into the start action's result.
+        Read declared text, or an already-recognized lexeme list, for one grammar into the start action's result.
 
-        Productions are selected, translated, and installed under unique
-        attributes. The parser is built with ``write_tables=False`` and
-        starts at the grammar start symbol. The return value is the start
-        action's ``p[0]``.
+        Exactly one of ``text`` and ``lexemes`` is required. Productions are
+        selected, translated, and installed under unique attributes. The
+        parser is built with ``write_tables=False`` and starts at the grammar
+        start symbol. A lexeme call does not build a lexer. The return value
+        is the start action's ``p[0]``.
 
         :param grammar_id: The grammar that owns the read.
         :type grammar_id: str
-        :param text: The source text to read.
-        :type text: str
+        :param text: The source text to read, or None when lexemes is supplied.
+        :type text: str | None
         :param tokens: The declared token rules.
         :type tokens: list
         :param productions: The declared production rules.
@@ -162,20 +166,37 @@ class PlyParser(PlyReader, ParserService):
         :type grammars: list
         :param rewrites: Optional rewrites forwarded to the lexer build and to production translation. Defaults to None.
         :type rewrites: dict | None
+        :param lexemes: Already-recognized lexemes. Defaults to None. Mutually exclusive with text. Not lexed and not laid out.
+        :type lexemes: list | None
         :return: The start action's ``p[0]``.
         :rtype: Any
         '''
 
+        # Require exactly one input before any grammar lookup or PLY call.
+        if (text is None) == (lexemes is None):
+            reason = 'missing' if text is None else 'ambiguous'
+            ServiceError.raise_for(
+                PlyParser,
+                PARSE_INPUT_INVALID_ID,
+                message=(
+                    'Exactly one of text or lexemes must be supplied '
+                    f'for grammar {grammar_id} ({reason}).'
+                ),
+                grammar_id=grammar_id,
+                reason=reason,
+            )
+
         # Resolve before PLY so a missing grammar never builds a parser.
         grammar = PlyReader.resolve_grammar(grammar_id, grammars)
 
-        # Build a new lexer for this call. Forward rewrites. Do not select by them.
-        lexer = PlyParser._build_lexer(
-            grammar_id,
-            grammars,
-            tokens,
-            rewrites=rewrites,
-        )
+        # Build a new lexer for a text call only. Forward rewrites. Do not select by them.
+        if lexemes is None:
+            lexer = PlyParser._build_lexer(
+                grammar_id,
+                grammars,
+                tokens,
+                rewrites=rewrites,
+            )
 
         # Select in ancestry order. Repeated names stay as alternatives.
         selected = GrammarRuleSelector.select_productions(
@@ -191,13 +212,22 @@ class PlyParser(PlyReader, ParserService):
         )
 
         # The parser token list is the selected token order. Forward rewrites.
-        installed_tokens = PlyReader.install_tokens(
-            grammar,
-            grammars,
-            tokens,
-            rewrites=rewrites,
-        )
-        module.tokens = list(installed_tokens.tokens)
+        if lexemes is None:
+            installed_tokens = PlyReader.install_tokens(
+                grammar,
+                grammars,
+                tokens,
+                rewrites=rewrites,
+            )
+            module.tokens = list(installed_tokens.tokens)
+        else:
+            # A lexeme call takes the selected names untranslated and streams the caller list.
+            module.tokens = PlyReader.select_token_names(
+                grammar,
+                grammars,
+                tokens,
+            )
+            lexer = LexemeStream(lexemes)
 
         # Point syntax errors at the span-bearing helper.
         def p_error(token):
@@ -223,10 +253,15 @@ class PlyParser(PlyReader, ParserService):
                 grammar_id=grammar_id,
             )
 
-        # Return the start action's p[0]. Wrap only this call.
+        # Return the start action's p[0]. Wrap only this call. A stream gets no text.
         try:
+            if lexemes is None:
+                return parser.parse(
+                    text,
+                    lexer=lexer,
+                    debug=False,
+                )
             return parser.parse(
-                text,
                 lexer=lexer,
                 debug=False,
             )
