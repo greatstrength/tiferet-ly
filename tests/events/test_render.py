@@ -84,7 +84,7 @@ def test_parse_feature_wires_render_result_step() -> None:
 
     # Assert the request schema and the flagged terminal step.
     assert parse['params_schema']['grammar_id'] == 'str'
-    assert parse['params_schema']['text'] == 'str'
+    assert parse['params_schema']['text'] == {'type': 'str', 'required': False}
     assert parse['params_schema']['render_result'] == {
         'type': 'bool',
         'required': False,
