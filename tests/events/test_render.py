@@ -12,6 +12,7 @@ from tiferet.events.core import DomainEvent
 from tiferet.mappers.cli import CliCommandConfigObject
 
 # ** app
+import tiferet_ly.events.render as render_events
 from tiferet_ly.events.render import RenderResult
 from tiferet_ly.interfaces.parser import ParserService
 from tiferet_ly.mappers.ast import AstNodeAggregate
@@ -56,9 +57,6 @@ def test_render_events_do_not_import_ply_or_write() -> None:
     '''
     Test that render events import neither ply nor write methods.
     '''
-
-    # Import the event module and inspect its surface.
-    import tiferet_ly.events.render as render_events
 
     # Assert ply is absent and the events have no save or delete.
     assert 'ply' not in render_events.__dict__
