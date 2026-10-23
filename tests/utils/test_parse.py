@@ -4,24 +4,31 @@
 
 # ** core
 import ast
+import inspect
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 # ** infra
+import ply.yacc as yacc
 import pytest
-
-# ** app
 from tiferet import use_tester
 from tiferet.interfaces.core import ServiceError
+
+# ** app
+from tiferet_ly.assets.grammar import GRAMMAR_NOT_FOUND_ID
 from tiferet_ly.assets.reader import (
     ACTION_EXECUTION_FAILED_ID,
     PARSE_ERROR_ID,
+    PARSE_INPUT_INVALID_ID,
     READER_BUILD_FAILED_ID,
 )
+from tiferet_ly.assets.translation import RULE_PATTERN_INVALID_ID
 from tiferet_ly.interfaces.parser import ParserService
 from tiferet_ly.mappers.grammar import GrammarAggregate
+from tiferet_ly.mappers.lexeme import LexemeAggregate
 from tiferet_ly.mappers.production import (
     ComplexProductionRuleAggregate,
     SimpleProductionRuleAggregate,
@@ -29,10 +36,12 @@ from tiferet_ly.mappers.production import (
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 from tiferet_ly.utils import parse as parse_utils
 from tiferet_ly.utils.core import PlyReader
 from tiferet_ly.utils.parse import PlyParser
+from tiferet_ly.utils.translation import RuleTranslator
 
 # *** functions
 
@@ -574,3 +583,502 @@ class TestPlyParser:
         assert raised.value.kwargs['value'] == '+'
         assert raised.value.kwargs['lineno'] == 1
         assert raised.value.kwargs['lexpos'] == 0
+
+    # * test: positional_signature_keeps_text_callers
+    def test_positional_signature_keeps_text_callers(self, test_ctx, session):
+        '''
+        Keep the published positional prefix on both parse signatures, with lexemes last.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Both signatures list the same parameters in the same order.
+        expected = [
+            'self',
+            'grammar_id',
+            'text',
+            'tokens',
+            'productions',
+            'grammars',
+            'rewrites',
+            'lexemes',
+        ]
+        implementation = inspect.signature(PlyParser.parse)
+        interface = inspect.signature(ParserService.parse)
+        assert list(implementation.parameters) == expected
+        assert list(interface.parameters) == expected
+
+        # Text is optional by value only. Rewrites and lexemes default to None.
+        for signature in (implementation, interface):
+            assert signature.parameters['text'].annotation == str | None
+            assert signature.parameters['rewrites'].default is None
+            assert signature.parameters['lexemes'].default is None
+        assert interface.return_annotation is Any
+
+        # Names, annotations, and defaults match between the two.
+        def shape(signature):
+            return [
+                (name, parameter.annotation, parameter.default)
+                for name, parameter in signature.parameters.items()
+            ]
+
+        # The interface and implementation agree on every parameter shape.
+        assert shape(interface) == shape(implementation)
+
+        # A positional text call still reads. The sixth positional argument is rewrites.
+        class UnusedMarker:
+            pass
+
+        assert PlyParser().parse('expr', '1+2', _tokens(), _productions(), [_grammar()]) == 3
+        assert PlyParser().parse(
+            'expr',
+            '1+2',
+            _tokens(),
+            _productions(),
+            [_grammar()],
+            {'$unused': UnusedMarker},
+        ) == 3
+
+    # * test: missing_or_ambiguous_input_raises_before_ply
+    def test_missing_or_ambiguous_input_raises_before_ply(self, test_ctx, session):
+        '''
+        Raise ``PARSE_INPUT_INVALID_ID`` for a missing or ambiguous input before any lookup or PLY call.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Either PLY step would fail loudly. The grammar id would not resolve.
+        with patch(
+            'tiferet_ly.utils.parse.yacc.yacc',
+            side_effect=AssertionError('yacc'),
+        ) as built, patch.object(
+            PlyParser,
+            '_build_lexer',
+            side_effect=AssertionError('lexer'),
+        ) as lexed:
+            with pytest.raises(ServiceError) as missing:
+                PlyParser().parse(
+                    'missing',
+                    None,
+                    _tokens(),
+                    _productions(),
+                    [_grammar()],
+                )
+            with pytest.raises(ServiceError) as ambiguous:
+                PlyParser().parse(
+                    'missing',
+                    '1',
+                    _tokens(),
+                    _productions(),
+                    [_grammar()],
+                    lexemes=[
+                        LexemeAggregate.new('NUMBER', '1', 1, 0),
+                    ],
+                )
+
+        # Both None is missing. The message names the grammar and the reason.
+        assert missing.value.error_code == PARSE_INPUT_INVALID_ID
+        assert missing.value.kwargs['reason'] == 'missing'
+        assert missing.value.kwargs['grammar_id'] == 'missing'
+        assert missing.value.message == (
+            'Exactly one of text or lexemes must be supplied for grammar missing (missing).'
+        )
+
+        # Both supplied is ambiguous, and the grammar lookup never ran.
+        assert ambiguous.value.error_code == PARSE_INPUT_INVALID_ID
+        assert ambiguous.value.error_code != GRAMMAR_NOT_FOUND_ID
+        assert ambiguous.value.kwargs['reason'] == 'ambiguous'
+        assert ambiguous.value.message.endswith('(ambiguous).')
+        assert not built.called
+        assert not lexed.called
+
+    # * test: empty_text_and_empty_lexemes_are_supplied
+    def test_empty_text_and_empty_lexemes_are_supplied(self, test_ctx, session):
+        '''
+        Treat empty text and an empty lexeme list as supplied inputs.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Empty text takes the text path and builds a lexer.
+        with patch.object(
+            PlyParser,
+            '_build_lexer',
+            wraps=PlyParser._build_lexer,
+        ) as lexed:
+            with pytest.raises(ServiceError) as empty_text:
+                PlyParser().parse(
+                    'expr',
+                    '',
+                    _tokens(),
+                    _productions(),
+                    [_grammar()],
+                )
+        assert empty_text.value.error_code != PARSE_INPUT_INVALID_ID
+        assert lexed.called
+
+        # An empty list takes the lexeme path and ends at input without a span.
+        with patch.object(
+            PlyParser,
+            '_build_lexer',
+            wraps=PlyParser._build_lexer,
+        ) as lexed:
+            with pytest.raises(ServiceError) as empty_lexemes:
+                PlyParser().parse(
+                    'expr',
+                    None,
+                    _tokens(),
+                    _productions(),
+                    [_grammar()],
+                    lexemes=[],
+                )
+        error = empty_lexemes.value
+        assert error.error_code != PARSE_INPUT_INVALID_ID
+        assert error.error_code == PARSE_ERROR_ID
+        assert error.kwargs['grammar_id'] == 'expr'
+        for key in ('type', 'value', 'lineno', 'lexpos'):
+            assert key not in error.kwargs
+        assert not lexed.called
+
+    # * test: lexemes_preserve_order_payload_and_span
+    def test_lexemes_preserve_order_payload_and_span(self, test_ctx, session):
+        '''
+        Read lexemes in list order, keep each payload, and carry each span into a syntax error.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Record the build flags, then let PLY build for real.
+        calls = []
+        real_yacc = parse_utils.yacc.yacc
+
+        def wrapped(*args, **kwargs):
+            calls.append(kwargs)
+            return real_yacc(*args, **kwargs)
+
+        # The lexpos values are out of order. List order still wins.
+        lexemes = [
+            LexemeAggregate.new('NUMBER', '1', 2, 10),
+            LexemeAggregate.new('PLUS', '+', 2, 0),
+            LexemeAggregate.new('NUMBER', '2', 3, 5),
+        ]
+        with patch('tiferet_ly.utils.parse.yacc.yacc', side_effect=wrapped):
+            result = PlyParser().parse(
+                'expr',
+                None,
+                _tokens(),
+                _productions(),
+                [_grammar()],
+                lexemes=lexemes,
+            )
+        assert result == 3
+        assert len(calls) == 1
+        assert calls[0]['write_tables'] is False
+        assert calls[0]['debug'] is False
+        assert calls[0]['start'] == 'expr'
+        assert isinstance(calls[0]['errorlog'], yacc.NullLogger)
+
+        # The payload reaches the action unchanged. No text is re-read.
+        passthrough = ComplexProductionRuleAggregate(
+            name='expr',
+            grammar_id='expr',
+            spec='expr : NUMBER',
+            action='p[0] = p[1]',
+        )
+        assert PlyParser().parse(
+            'expr',
+            None,
+            _tokens(),
+            [passthrough],
+            [_grammar()],
+            lexemes=[
+                LexemeAggregate.new('NUMBER', 'kept', 1, 0),
+            ],
+        ) == 'kept'
+
+        # A lexeme the grammar cannot shift carries its own span.
+        with pytest.raises(ServiceError) as raised:
+            PlyParser().parse(
+                'expr',
+                None,
+                _tokens(),
+                _productions(),
+                [_grammar()],
+                lexemes=[
+                    LexemeAggregate.new('PLUS', '+', 4, 9),
+                ],
+            )
+        assert raised.value.error_code == PARSE_ERROR_ID
+        assert raised.value.kwargs['grammar_id'] == 'expr'
+        assert raised.value.kwargs['type'] == 'PLUS'
+        assert raised.value.kwargs['value'] == '+'
+        assert raised.value.kwargs['lineno'] == 4
+        assert raised.value.kwargs['lexpos'] == 9
+
+    # * test: lexemes_do_not_lex_translate_or_apply_layout
+    def test_lexemes_do_not_lex_translate_or_apply_layout(self, test_ctx, session):
+        '''
+        Skip the lexer build, token install, and token translation on the lexeme path.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The token pattern is invalid. Translating it would raise.
+        tokens = [
+            ComplexTokenRuleAggregate(
+                name='NUMBER',
+                grammar_id='expr',
+                pattern='[',
+                action='return t',
+            ),
+        ]
+        productions = [
+            ComplexProductionRuleAggregate(
+                name='expr',
+                grammar_id='expr',
+                spec='expr : NUMBER',
+                action='p[0] = p[1]',
+            ),
+        ]
+        lexemes = [
+            LexemeAggregate.new('NUMBER', 'kept', 1, 0),
+        ]
+
+        # Record the list the stream receives and delegate to the real adapter.
+        received = []
+        real_stream = parse_utils.LexemeStream
+
+        def stream(value):
+            received.append(value)
+            return real_stream(value)
+
+        # Any lexer, install, or translation call fails loudly.
+        with patch.object(
+            PlyParser,
+            '_build_lexer',
+            side_effect=AssertionError('lexer'),
+        ) as lexed, patch.object(
+            PlyReader,
+            'install_tokens',
+            side_effect=AssertionError('install'),
+        ) as installed, patch.object(
+            RuleTranslator,
+            'translate_token_rule',
+            side_effect=AssertionError('translate'),
+        ) as translated, patch(
+            'tiferet_ly.utils.core.lex.lex',
+            side_effect=AssertionError('lex'),
+        ) as built, patch(
+            'tiferet_ly.utils.parse.LexemeStream',
+            side_effect=stream,
+        ):
+            try:
+                result = PlyParser().parse(
+                    'expr',
+                    None,
+                    tokens,
+                    productions,
+                    [_grammar()],
+                    lexemes=lexemes,
+                )
+            except ServiceError as error:
+                assert error.error_code not in (
+                    PARSE_INPUT_INVALID_ID,
+                    RULE_PATTERN_INVALID_ID,
+                )
+                raise
+
+        # The payload came back and none of the four ran.
+        assert result == 'kept'
+        assert not lexed.called
+        assert not installed.called
+        assert not translated.called
+        assert not built.called
+        assert len(received) == 1
+        assert received[0] is lexemes
+
+        # The utility calls the shared helper and does not inline or reapply anything.
+        source = Path(parse_utils.__file__).read_text()
+        assert 'PlyReader.select_token_names' in source
+        for forbidden in (
+            'derive_tokens',
+            'select_tokens',
+            'layout',
+            'LayoutFilter',
+            'grammar.ignore',
+        ):
+            assert forbidden not in source
+
+    # * test: lexemes_accept_synthetic_name
+    def test_lexemes_accept_synthetic_name(self, test_ctx, session):
+        '''
+        Accept a synthetic token name from lexemes without a pattern or a token attribute.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # END has a name and a grammar only.
+        tokens = [
+            _tokens()[0],
+            SyntheticTokenRuleAggregate(
+                name='END',
+                grammar_id='expr',
+            ),
+        ]
+        productions = [
+            ComplexProductionRuleAggregate(
+                name='expr',
+                grammar_id='expr',
+                spec='expr : NUMBER END',
+                action='p[0] = int(p[1])',
+            ),
+        ]
+        lexemes = [
+            LexemeAggregate.new('NUMBER', '42', 1, 0),
+            LexemeAggregate.new('END', '', 1, 2),
+        ]
+
+        # Capture the module PLY receives. Translation fails loudly.
+        captured = {}
+        real_yacc = parse_utils.yacc.yacc
+
+        def wrapped(*args, **kwargs):
+            captured['module'] = kwargs['module']
+            return real_yacc(*args, **kwargs)
+
+        with patch(
+            'tiferet_ly.utils.parse.yacc.yacc',
+            side_effect=wrapped,
+        ), patch.object(
+            RuleTranslator,
+            'translate_token_rule',
+            side_effect=AssertionError('translate'),
+        ) as translated:
+            result = PlyParser().parse(
+                'expr',
+                None,
+                tokens,
+                productions,
+                [_grammar()],
+                lexemes=lexemes,
+            )
+
+        # The parser token list is the helper's names, synthetic included.
+        module = captured['module']
+        assert result == 42
+        assert not translated.called
+        assert module.tokens == PlyReader.select_token_names(
+            _grammar(),
+            [_grammar()],
+            tokens,
+        )
+        assert 'END' in module.tokens
+        assert 'NUMBER' in module.tokens
+        assert not hasattr(module, 't_END')
+
+    # * test: lexemes_forward_caller_rewrites
+    def test_lexemes_forward_caller_rewrites(self, test_ctx, session):
+        '''
+        Forward the caller rewrite table to productions on the lexeme path without running token actions.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The token action would convert the value if it ran.
+        class BoundClass:
+            pass
+
+        token = ComplexTokenRuleAggregate(
+            name='NUMBER',
+            grammar_id='expr',
+            pattern=r'[0-9]+',
+            action='t.value = int(t.value)\nreturn t',
+        )
+        production = ComplexProductionRuleAggregate(
+            name='expr',
+            grammar_id='expr',
+            spec='expr : NUMBER',
+            action='p[0] = ($cls, p[1])',
+        )
+        result = PlyParser().parse(
+            'expr',
+            None,
+            [token],
+            [production],
+            [_grammar()],
+            rewrites={'$cls': BoundClass},
+            lexemes=[
+                LexemeAggregate.new('NUMBER', '7', 1, 0),
+            ],
+        )
+
+        # The production saw the caller class. The value stayed text.
+        assert result[0] is BoundClass
+        assert result[1] == '7'
+        assert result[1] != 7
+
+    # * test: lexemes_production_exception_uses_existing_wrap
+    def test_lexemes_production_exception_uses_existing_wrap(self, test_ctx, session):
+        '''
+        Wrap a production action exception on the lexeme path as the same attributed action failure.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The production raises before it can assign a value.
+        tokens = [
+            SimpleTokenRuleAggregate(
+                name='NUMBER',
+                grammar_id='expr',
+                pattern=r'[0-9]+',
+            ),
+        ]
+        production = ComplexProductionRuleAggregate(
+            name='expr',
+            grammar_id='expr',
+            spec='expr : NUMBER',
+            action="raise ValueError('boom')",
+        )
+        with pytest.raises(ServiceError) as raised:
+            PlyParser().parse(
+                'expr',
+                None,
+                tokens,
+                [production],
+                [_grammar()],
+                lexemes=[
+                    LexemeAggregate.new('NUMBER', '1', 1, 0),
+                ],
+            )
+
+        # The failure names the grammar, the compiled rule, and the cause.
+        assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
+        assert raised.value.message == 'boom'
+        assert raised.value.kwargs['grammar_id'] == 'expr'
+        assert raised.value.kwargs['rule_name'] == 'expr'
+        assert isinstance(raised.value.__cause__, ValueError)
+        assert raised.value.__cause__.args == ('boom',)
