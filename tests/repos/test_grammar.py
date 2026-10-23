@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 # ** app
+from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.repos.grammar import GrammarConfigRepository
 
@@ -109,3 +110,55 @@ def test_int_grammar_repo_serialized_yaml_shape(
             },
         },
     }
+
+
+# ** test_int: grammar_repo_fact_round_trip
+def test_int_grammar_repo_fact_round_trip(
+    grammar_repo: GrammarConfigRepository,
+) -> None:
+    '''
+    Assert present grammar facts are written to the body and reload equal,
+    and a cleared fact is omitted from the body and reloads as None.
+    '''
+
+    # Save a grammar with skip characters and a layout profile.
+    profile = LayoutProfile(
+        block_tokens=['COLON'],
+        indent_token='INDENT',
+        dedent_token='DEDENT',
+        tab_size=2,
+    )
+    grammar = GrammarAggregate(
+        id='core',
+        parent_ids=[],
+        start='module',
+        ignore=' \t',
+        layout=profile,
+    )
+    grammar_repo.save(grammar)
+
+    # Assert the saved body carries the exact string and the profile's fields.
+    raw = yaml.safe_load(Path(grammar_repo.config_file).read_text(encoding='utf-8'))
+    body = raw['grammars']['core']
+    assert body['ignore'] == ' \t'
+    assert body['layout'] == profile.model_dump(exclude_none=True)
+
+    # Assert get returns the exact string and an equal profile.
+    loaded = grammar_repo.get('core')
+    assert loaded.ignore == ' \t'
+    assert isinstance(loaded.layout, LayoutProfile)
+    assert loaded.layout.model_dump() == profile.model_dump()
+
+    # Clear both facts, save, and assert the body omits them.
+    loaded.set_ignore(None)
+    loaded.set_layout(None)
+    grammar_repo.save(loaded)
+    raw = yaml.safe_load(Path(grammar_repo.config_file).read_text(encoding='utf-8'))
+    assert raw['grammars']['core'] == {
+        'parent_ids': [],
+        'start': 'module',
+    }
+    reloaded = grammar_repo.get('core')
+    assert reloaded.ignore is None
+    assert reloaded.layout is None
+

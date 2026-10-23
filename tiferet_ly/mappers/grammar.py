@@ -3,14 +3,17 @@
 # *** imports
 
 # ** core
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 
-# ** app
+# ** infra
 from tiferet import (
     Aggregate,
     TransferObject,
 )
+
+# ** app
 from ..domain.grammar import Grammar
+from ..domain.layout import LayoutProfile
 
 # *** mappers
 
@@ -20,7 +23,9 @@ class GrammarAggregate(Grammar, Aggregate):
     Mutable aggregate for a Grammar.
 
     Mutators mirror the operations domain events will call when updating
-    a grammar's identity structure (start symbol and parent composition).
+    a grammar's identity structure (set_start and set_parent_ids) and its
+    grammar-own facts (set_ignore and set_layout). Each mutator assigns
+    one field and leaves the others unchanged.
     '''
 
     # * method: set_start
@@ -50,6 +55,34 @@ class GrammarAggregate(Grammar, Aggregate):
 
         # Replace the parent ids list in full.
         self.parent_ids = list(parent_ids)
+
+    # * method: set_ignore
+    def set_ignore(self, ignore: Optional[str]) -> None:
+        '''
+        Set or clear the literal skip characters.
+
+        :param ignore: The literal skip characters, stored exactly as given, or None to clear.
+        :type ignore: Optional[str]
+        :return: None
+        :rtype: None
+        '''
+
+        # Assign the skip characters verbatim; validate_assignment=True handles re-validation.
+        self.ignore = ignore
+
+    # * method: set_layout
+    def set_layout(self, layout: Optional[LayoutProfile]) -> None:
+        '''
+        Set or clear the layout profile, replacing any existing profile whole.
+
+        :param layout: The new layout profile, or None to clear.
+        :type layout: Optional[LayoutProfile]
+        :return: None
+        :rtype: None
+        '''
+
+        # Assign the whole profile; validate_assignment=True runs the field's own validation.
+        self.layout = layout
 
 
 # ** mapper: grammar_config_object

@@ -6,10 +6,10 @@
 from typing import List, Optional
 
 # ** infra
-from pydantic import Field
+from pydantic import Field, StrictStr
+from tiferet.domain.core import DomainObject
 
 # ** app
-from tiferet.domain.core import DomainObject
 from .layout import LayoutProfile
 
 # *** models
@@ -18,7 +18,8 @@ from .layout import LayoutProfile
 class Grammar(DomainObject):
     '''
     A declared grammar's own composition structure: the other grammars it
-    extends (parent_ids) and its start symbol. Deliberately lean — a
+    extends (parent_ids) and its start symbol, plus the grammar-own facts
+    it carries about itself (ignore and layout). Deliberately lean — a
     Grammar does not hold the token/production rules declared under it
     (each rule names its one owning grammar directly via grammar_id, not
     the other way around), and performs no validation beyond whatever
@@ -29,8 +30,8 @@ class Grammar(DomainObject):
     existing production in that resolved set — is a cross-aggregate
     concern requiring the full grammar/production sets, which no single
     Grammar instance has access to. That concern belongs to whatever
-    writes a Grammar (e.g. AddGrammar/UpdateGrammar), not to this domain
-    object's own construction.
+    writes a Grammar (e.g. AddGrammar, SetGrammarStart, or
+    SetGrammarParentIds), not to this domain object's own construction.
     '''
 
     # * attribute: id
@@ -62,13 +63,15 @@ class Grammar(DomainObject):
     )
 
     # * attribute: ignore
-    ignore: Optional[str] = Field(
+    ignore: Optional[StrictStr] = Field(
         default=None,
         description=(
-            "A bare regular-expression character class PLY skips before "
-            'attempting any token rule, installed as the literal t_ignore '
-            'module attribute PLY\'s own convention expects. Grammar-own, '
-            'like start: not composed across parent_ids.'
+            'The literal skip characters PLY passes over before attempting '
+            'any token rule. Each character in the string is skipped as '
+            'itself; the string is stored and installed exactly as given, '
+            'as the t_ignore module attribute PLY\'s own convention '
+            'expects. Grammar-own, like start: not composed across '
+            'parent_ids.'
         ),
     )
 

@@ -88,13 +88,13 @@ declaration, compiled when the rule is translated.
 **Grammar** — a named composition node for one declared language or
 dialect: an identity, an ordered list of parent grammars it extends, the
 start-symbol production a reader begins from, and a small set of
-grammar-own lexical facts — a bare ignore pattern the engine skips before
-any rule, and an optional layout profile (below) describing how this
-grammar's own stream should be shaped. A grammar does not contain its
+grammar-own lexical facts — literal skip characters the engine passes over
+before any rule, and an optional layout profile (below) describing how
+this grammar's own stream should be shaped. A grammar does not contain its
 rules. Each rule names the one grammar it belongs to. Unlike the rule
 catalogues, a grammar's own facts do not compose across `parent_ids`: a
-dialect that wants its parent's ignore pattern or layout profile repeats
-it (Section 7).
+dialect that wants its parent's skip characters or layout profile repeats
+them (Section 7).
 
 **Grammar composition** — the relationship among grammars. A grammar may
 extend one or more parents. Walking parents in declared order, recording
@@ -200,10 +200,10 @@ Accept the three catalogues, branch each token rule on whether it is
 simple, complex, or synthetic (a production only ever branches on simple
 versus complex), and produce an in-memory language ready for translation.
 A grammar is checked only for its own shape — identity, parents, start
-symbol, ignore pattern, layout profile — not for whether those parents
-exist, whether they form a cycle, or whether the start symbol names a
-production. Those questions require the catalogues together, and belong
-to whoever writes a grammar, not to a grammar in isolation.
+symbol, literal skip characters, layout profile — not for whether those
+parents exist, whether they form a cycle, or whether the start symbol
+names a production. Those questions require the catalogues together, and
+belong to whoever writes a grammar, not to a grammar in isolation.
 
 **Verdict:** agnostic to the declared-language axis — this step's job is
 exactly to accept any language's vocabulary and grammar. Variable only in
@@ -249,12 +249,12 @@ satisfy completeness (the full token list, not a partial one) and hand the
 translated rules to the engine. The engine itself stays behind a boundary
 this domain owns, so nothing above assembly imports it directly.
 
-A grammar's own facts — its ignore pattern and its layout profile — are
-not part of that ancestry walk. They are read directly off the *target*
-grammar, exactly as its start symbol already is; composition resolves
-which rules are in scope, never which grammar-own facts apply. An ignore
-pattern is engine-facing and installed once, directly, alongside the
-translated rules. A layout profile is not installed into the engine at
+A grammar's own facts — its literal skip characters and its layout
+profile — are not part of that ancestry walk. They are read directly off
+the *target* grammar, exactly as its start symbol already is; composition
+resolves which rules are in scope, never which grammar-own facts apply.
+Skip characters are engine-facing and installed once, directly, alongside
+the translated rules. A layout profile is not installed into the engine at
 all — it configures the post-lex filter that shapes the reader's output
 after the engine has already run (Section 5.4).
 
@@ -331,17 +331,17 @@ Token rules, productions, and grammars are independent. A grammar does not
 own its rules; a rule names its grammar. That independence is what makes
 composition a filter rather than a container walk, and what keeps the
 complexity axis from being entangled with the composition axis. A
-grammar's own facts — start symbol, ignore pattern, layout profile — are a
-different kind of ownership entirely: not rules the grammar contains, but
-scalar values the grammar carries about itself, read once at assembly
-(ignore) or once per lexeme-only read (layout), never filtered or
-composed the way a rule catalogue is.
+grammar's own facts — start symbol, literal skip characters, layout
+profile — are a different kind of ownership entirely: not rules the
+grammar contains, but scalar values the grammar carries about itself,
+read once at assembly (ignore) or once per lexeme-only read (layout),
+never filtered or composed the way a rule catalogue is.
 
 Translation depends on a rule's own fields and on the rewrite table. It
 does not depend on which grammar the rule belongs to. Assembly depends on
 the three catalogues together — that is the first step that is allowed to
-know a grammar's parents and a language's full token list — and, for an
-ignore pattern, on the target grammar's own declared value. A
+know a grammar's parents and a language's full token list — and, for
+skip characters, on the target grammar's own declared value. A
 parse-driven read depends only on a reader and a piece of text. A
 lexeme-only read depends on the reader, the text, and — when the target
 grammar declared one — its layout profile, since that is what the
@@ -388,10 +388,10 @@ mechanism.
   complex rule's action actually does.
 - Which grammars exist, which parents each extends, and which start
   symbol a reader begins from.
-- Whether any grammar declares an ignore pattern or a layout profile at
-  all, which already-recognized token names a declared profile points at
-  as block, delimiter, or newline tokens, and the declared width one
-  indentation level spans in that profile.
+- Whether any grammar declares literal skip characters or a layout
+  profile at all, which already-recognized token names a declared profile
+  points at as block, delimiter, or newline tokens, and the declared width
+  one indentation level spans in that profile.
 - Whatever structured result a language's actions choose to build. There
   is no required shape. A language that already owns a tree binds its own
   factories as extra rewrite-table rows.

@@ -3,11 +3,15 @@
 # *** imports
 
 # ** core
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+
+# ** infra
+from tiferet import a as tiferet_a
+from tiferet.events.core import DomainEvent
 
 # ** app
-from tiferet.events.core import DomainEvent
 from .. import assets as a
+from ..domain.layout import LayoutProfile
 from ..interfaces.grammar import GrammarService
 from ..interfaces.production import ProductionService
 from ..interfaces.token import TokenService
@@ -23,6 +27,7 @@ class GrammarEvent(DomainEvent):
 
     Cross-aggregate writers add ProductionService and, for delete, TokenService
     so cycle, parent, start, and still-referenced checks can run before save.
+    Grammar-own fact writers need GrammarService alone.
     '''
 
     # * attribute: grammar_service
@@ -64,6 +69,31 @@ class GrammarEvent(DomainEvent):
 
         # Return the loaded grammar.
         return grammar
+
+    # * method: _require_keyword
+    def _require_keyword(self, name: str, kwargs: Dict[str, Any]) -> None:
+        '''
+        Verify a keyword was passed, whatever its value.
+
+        Unlike parameters_required, a None or whitespace-only value counts as
+        present, so a fact writer can tell an omitted keyword from a clear.
+
+        :param name: The keyword that must be present.
+        :type name: str
+        :param kwargs: The keyword arguments the event was called with.
+        :type kwargs: Dict[str, Any]
+        :return: None
+        :rtype: None
+        '''
+
+        # Refuse the call when the keyword is absent, using the framework's required-parameter error.
+        self.verify(
+            name in kwargs,
+            tiferet_a.error.COMMAND_PARAMETER_REQUIRED_ID,
+            message=f'Required parameters missing for {self.__class__.__name__}.',
+            parameters=[name],
+            command=self.__class__.__name__,
+        )
 
     # * method: _verify_parents_exist
     def _verify_parents_exist(
@@ -152,6 +182,9 @@ class GrammarEvent(DomainEvent):
 class AddGrammar(GrammarEvent):
     '''
     Event to persist a new grammar after parent, cycle, and start checks.
+
+    The optional ignore and layout facts are stored on the new grammar only.
+    Omitting a fact and passing None both leave it absent.
     '''
 
     # * attribute: production_service
@@ -180,6 +213,8 @@ class AddGrammar(GrammarEvent):
             id: str,
             start: str,
             parent_ids: Optional[List[str]] = None,
+            ignore: Optional[str] = None,
+            layout: Optional[LayoutProfile] = None,
             **kwargs) -> GrammarAggregate:
         '''
         Add a new grammar.
@@ -190,6 +225,10 @@ class AddGrammar(GrammarEvent):
         :type start: str
         :param parent_ids: Optional ordered parent grammar ids.
         :type parent_ids: Optional[List[str]]
+        :param ignore: Optional literal skip characters, stored exactly as given.
+        :type ignore: Optional[str]
+        :param layout: Optional layout profile.
+        :type layout: Optional[LayoutProfile]
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: The created grammar aggregate.
@@ -212,10 +251,13 @@ class AddGrammar(GrammarEvent):
         self._verify_no_cycle(id, resolved_parent_ids)
 
         # Construct the grammar without saving so the start check can use it.
+        # The facts pass through as given, so an empty ignore string stays set.
         grammar = GrammarAggregate(
             id=id,
             parent_ids=resolved_parent_ids,
             start=start,
+            ignore=ignore,
+            layout=layout,
         )
         self._verify_start_resolves(grammar)
 
@@ -371,6 +413,79 @@ class SetGrammarParentIds(GrammarEvent):
         # Apply the parent mutator, then re-check start against the new ancestry.
         grammar.set_parent_ids(parent_ids)
         self._verify_start_resolves(grammar)
+
+        # Persist and return the updated grammar.
+        self.grammar_service.save(grammar)
+        return grammar
+
+
+# ** event: set_grammar_ignore
+class SetGrammarIgnore(GrammarEvent):
+    '''
+    Event to set or clear a grammar's literal skip characters.
+
+    The ignore keyword must be present; None clears the fact. Start,
+    parents, and layout are left unchanged, so no cross-aggregate check runs.
+    '''
+
+    # * method: execute
+    @DomainEvent.parameters_required(['id'])
+    def execute(self, id: str, **kwargs) -> GrammarAggregate:
+        '''
+        Set or clear a grammar's literal skip characters.
+
+        :param id: The grammar identifier.
+        :type id: str
+        :param kwargs: Additional keyword arguments; must include ignore, the
+            literal skip characters (Optional[str]) or None to clear.
+        :type kwargs: dict
+        :return: The updated grammar aggregate.
+        :rtype: GrammarAggregate
+        '''
+
+        # Verify the ignore keyword was passed, even as None or a blank string.
+        self._require_keyword('ignore', kwargs)
+
+        # Load the grammar and assign the skip characters verbatim.
+        grammar = self._require_grammar(id)
+        grammar.set_ignore(kwargs['ignore'])
+
+        # Persist and return the updated grammar.
+        self.grammar_service.save(grammar)
+        return grammar
+
+
+# ** event: set_grammar_layout
+class SetGrammarLayout(GrammarEvent):
+    '''
+    Event to set or clear a grammar's layout profile.
+
+    The layout keyword must be present; None clears the fact. The profile
+    is validated by the Grammar.layout field itself. Start, parents, and
+    ignore are left unchanged, so no cross-aggregate check runs.
+    '''
+
+    # * method: execute
+    @DomainEvent.parameters_required(['id'])
+    def execute(self, id: str, **kwargs) -> GrammarAggregate:
+        '''
+        Set or clear a grammar's layout profile.
+
+        :param id: The grammar identifier.
+        :type id: str
+        :param kwargs: Additional keyword arguments; must include layout, the
+            replacement LayoutProfile or None to clear.
+        :type kwargs: dict
+        :return: The updated grammar aggregate.
+        :rtype: GrammarAggregate
+        '''
+
+        # Verify the layout keyword was passed, even as None.
+        self._require_keyword('layout', kwargs)
+
+        # Load the grammar and replace the whole profile through the field.
+        grammar = self._require_grammar(id)
+        grammar.set_layout(kwargs['layout'])
 
         # Persist and return the updated grammar.
         self.grammar_service.save(grammar)

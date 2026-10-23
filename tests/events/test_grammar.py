@@ -3,25 +3,33 @@
 # *** imports
 
 # ** core
+from pathlib import Path
 from unittest.mock import Mock
 
 # ** infra
 import pytest
-
-# ** app
+import yaml
+from pydantic import ValidationError
+from tiferet import a as tiferet_a
 from tiferet.assets.core import TiferetError
 from tiferet.events.core import DomainEvent
+
+# ** app
 from tiferet_ly import assets as a
+from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.events.grammar import (
     AddGrammar,
     GetGrammar,
     GrammarEvent,
     ListGrammars,
     RemoveGrammar,
+    SetGrammarIgnore,
+    SetGrammarLayout,
     SetGrammarParentIds,
     SetGrammarStart,
 )
 from tiferet_ly.mappers.grammar import GrammarAggregate
+from tiferet_ly.repos.grammar import GrammarConfigRepository
 from tiferet_ly.mappers.production import SimpleProductionRuleAggregate
 from tiferet_ly.mappers.token import SimpleTokenRuleAggregate
 
@@ -161,6 +169,49 @@ def token_service(tokens=None) -> Mock:
     service.list.return_value = list(tokens or [])
     return service
 
+
+# ** function: layout_profile
+def layout_profile(indent_token: str = 'INDENT', tab_size: int = 4) -> LayoutProfile:
+    '''
+    Construct a layout profile for fact-write tests.
+
+    :param indent_token: The synthetic indent token name.
+    :type indent_token: str
+    :param tab_size: The declared indentation width.
+    :type tab_size: int
+    :return: The constructed profile.
+    :rtype: LayoutProfile
+    '''
+
+    # Construct a profile with a block token and the given names and width.
+    return LayoutProfile(
+        block_tokens=['COLON'],
+        indent_token=indent_token,
+        dedent_token='DEDENT',
+        tab_size=tab_size,
+    )
+
+
+# *** fixtures
+
+# ** fixture: grammar_repo
+@pytest.fixture
+def grammar_repo(tmp_path: Path) -> GrammarConfigRepository:
+    '''
+    Build a real GrammarConfigRepository against a temporary YAML file.
+
+    :param tmp_path: Pytest temporary directory.
+    :type tmp_path: Path
+    :return: The repository under test.
+    :rtype: GrammarConfigRepository
+    '''
+
+    # Seed an empty YAML document so the loader can open the file.
+    config_path = tmp_path / 'grammars.yml'
+    config_path.write_text('{}\n', encoding='utf-8')
+
+    # Return the repository pointed at the temp file.
+    return GrammarConfigRepository(grammar_config=str(config_path))
 
 # *** tests
 
@@ -557,3 +608,517 @@ def test_shrinking_writers_import_grammar_rule_selector() -> None:
     # Assert both modules bind the RFP-004 utility.
     assert production_events.GrammarRuleSelector is GrammarRuleSelector
     assert grammar_events.GrammarRuleSelector is GrammarRuleSelector
+
+
+# ** test: add_grammar_saves_both_facts
+def test_add_grammar_saves_both_facts() -> None:
+    '''
+    Test that AddGrammar with ignore and a layout profile saves both and
+    returns an aggregate carrying both.
+    '''
+
+    # Handle AddGrammar with both facts.
+    grammars = grammar_service()
+    profile = layout_profile()
+    result = DomainEvent.handle(
+        AddGrammar,
+        dependencies={
+            'grammar_service': grammars,
+            'production_service': production_service([production()]),
+        },
+        id='arithmetic',
+        start='expression',
+        ignore=' \t',
+        layout=profile,
+    )
+
+    # Assert the saved and returned aggregate carries both facts.
+    assert result.ignore == ' \t'
+    assert result.layout == profile
+    grammars.save.assert_called_once_with(result)
+
+
+# ** test: add_grammar_without_facts_saves_none
+@pytest.mark.parametrize('facts', [
+    {},
+    {'ignore': None, 'layout': None},
+])
+def test_add_grammar_without_facts_saves_none(facts) -> None:
+    '''
+    Test that AddGrammar with the facts omitted, or passed as None, saves
+    both as None.
+    '''
+
+    # Handle AddGrammar with no facts or explicit None facts.
+    grammars = grammar_service()
+    result = DomainEvent.handle(
+        AddGrammar,
+        dependencies={
+            'grammar_service': grammars,
+            'production_service': production_service([production()]),
+        },
+        id='arithmetic',
+        start='expression',
+        **facts,
+    )
+
+    # Assert both facts are absent on the saved aggregate.
+    assert result.ignore is None
+    assert result.layout is None
+    grammars.save.assert_called_once_with(result)
+
+
+# ** test: add_grammar_empty_ignore_is_set
+def test_add_grammar_empty_ignore_is_set() -> None:
+    '''
+    Test that AddGrammar with ignore='' stores the empty string, not None.
+    '''
+
+    # Handle AddGrammar with an empty skip string.
+    grammars = grammar_service()
+    result = DomainEvent.handle(
+        AddGrammar,
+        dependencies={
+            'grammar_service': grammars,
+            'production_service': production_service([production()]),
+        },
+        id='arithmetic',
+        start='expression',
+        ignore='',
+    )
+
+    # Assert the empty string survives.
+    assert result.ignore == ''
+    grammars.save.assert_called_once()
+
+
+# ** test: add_grammar_failed_checks_with_facts_do_not_save
+@pytest.mark.parametrize('catalogue, productions, id, parent_ids, error_code', [
+    ([], [production()], 'comments', ['missing'], a.error.GRAMMAR_PARENT_NOT_FOUND_ID),
+    ([], [production(grammar_id='loop')], 'loop', ['loop'], a.error.GRAMMAR_CYCLE_DETECTED_ID),
+    ([], [], 'arithmetic', [], a.error.GRAMMAR_START_NOT_FOUND_ID),
+])
+def test_add_grammar_failed_checks_with_facts_do_not_save(
+        catalogue,
+        productions,
+        id,
+        parent_ids,
+        error_code) -> None:
+    '''
+    Test that AddGrammar still refuses the save on a failed parent, cycle,
+    or start check when ignore and layout are supplied.
+    '''
+
+    # Handle AddGrammar with both facts and a failing check.
+    grammars = grammar_service(catalogue)
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            AddGrammar,
+            dependencies={
+                'grammar_service': grammars,
+                'production_service': production_service(productions),
+            },
+            id=id,
+            start='expression',
+            parent_ids=parent_ids,
+            ignore=' \t',
+            layout=layout_profile(),
+        )
+
+    # Assert the existing check error and that save is not called.
+    assert raised.value.error_code == error_code
+    grammars.save.assert_not_called()
+
+
+# ** test: add_grammar_rejected_fact_does_not_save
+@pytest.mark.parametrize('facts', [
+    {'ignore': 5},
+    {'layout': {'indent_token': 'INDENT', 'dedent_token': 'DEDENT', 'tab_size': 0}},
+    {'layout': {'indent_token': 'INDENT', 'dedent_token': 'DEDENT', 'tab_size': -1}},
+    {'layout': {'indent_token': 'INDENT', 'dedent_token': 'DEDENT', 'tab_size': False}},
+])
+def test_add_grammar_rejected_fact_does_not_save(facts) -> None:
+    '''
+    Test that AddGrammar with a fact the model rejects raises the field's
+    ValidationError and does not save.
+    '''
+
+    # Handle AddGrammar with a rejected fact.
+    grammars = grammar_service()
+    with pytest.raises(ValidationError):
+        DomainEvent.handle(
+            AddGrammar,
+            dependencies={
+                'grammar_service': grammars,
+                'production_service': production_service([production()]),
+            },
+            id='arithmetic',
+            start='expression',
+            **facts,
+        )
+
+    # Assert nothing was saved.
+    grammars.save.assert_not_called()
+
+
+# ** test: set_grammar_ignore_sets_exact_string
+@pytest.mark.parametrize('ignore', [' \t', '[ \t]'])
+def test_set_grammar_ignore_sets_exact_string(ignore) -> None:
+    '''
+    Test that SetGrammarIgnore saves the exact string and leaves layout,
+    start, and parent_ids unchanged.
+    '''
+
+    # Persist a dialect that already carries a layout profile.
+    profile = layout_profile()
+    root = grammar('arithmetic')
+    dialect = GrammarAggregate(
+        id='comments',
+        parent_ids=['arithmetic'],
+        start='expression',
+        layout=profile,
+    )
+    grammars = grammar_service([root, dialect])
+    result = DomainEvent.handle(
+        SetGrammarIgnore,
+        dependencies={'grammar_service': grammars},
+        id='comments',
+        ignore=ignore,
+    )
+
+    # Assert the exact string is saved and nothing else changed.
+    assert result.ignore == ignore
+    assert result.layout == profile
+    assert result.start == 'expression'
+    assert result.parent_ids == ['arithmetic']
+    grammars.save.assert_called_once_with(result)
+
+
+# ** test: set_grammar_ignore_none_clears
+def test_set_grammar_ignore_none_clears() -> None:
+    '''
+    Test that SetGrammarIgnore with ignore=None clears the fact, saves, and
+    leaves layout unchanged.
+    '''
+
+    # Persist a grammar with both facts and clear ignore.
+    profile = layout_profile()
+    root = GrammarAggregate(id='arithmetic', start='expression', ignore=' ', layout=profile)
+    grammars = grammar_service([root])
+    result = DomainEvent.handle(
+        SetGrammarIgnore,
+        dependencies={'grammar_service': grammars},
+        id='arithmetic',
+        ignore=None,
+    )
+
+    # Assert the clear is saved and layout is untouched.
+    assert result.ignore is None
+    assert result.layout == profile
+    grammars.save.assert_called_once_with(result)
+
+
+# ** test: set_grammar_ignore_rejects_non_string
+def test_set_grammar_ignore_rejects_non_string() -> None:
+    '''
+    Test that SetGrammarIgnore with a non-string, non-None value does not save.
+    '''
+
+    # Handle SetGrammarIgnore with an integer.
+    grammars = grammar_service([grammar('arithmetic')])
+    with pytest.raises(ValidationError):
+        DomainEvent.handle(
+            SetGrammarIgnore,
+            dependencies={'grammar_service': grammars},
+            id='arithmetic',
+            ignore=5,
+        )
+
+    # Assert nothing was saved.
+    grammars.save.assert_not_called()
+
+
+# ** test: set_grammar_layout_sets_or_clears
+def test_set_grammar_layout_sets_or_clears() -> None:
+    '''
+    Test that SetGrammarLayout saves a profile, then clears it on None,
+    leaving ignore, start, and parent_ids unchanged each time.
+    '''
+
+    # Persist a grammar with skip characters and set a profile.
+    root = GrammarAggregate(id='arithmetic', start='expression', ignore=' \t')
+    grammars = grammar_service([root])
+    profile = layout_profile()
+    result = DomainEvent.handle(
+        SetGrammarLayout,
+        dependencies={'grammar_service': grammars},
+        id='arithmetic',
+        layout=profile,
+    )
+
+    # Assert the profile is saved and ignore is untouched.
+    assert result.layout == profile
+    assert result.ignore == ' \t'
+    assert result.start == 'expression'
+    assert result.parent_ids == []
+
+    # Clear the profile and assert ignore is still untouched.
+    result = DomainEvent.handle(
+        SetGrammarLayout,
+        dependencies={'grammar_service': grammars},
+        id='arithmetic',
+        layout=None,
+    )
+    assert result.layout is None
+    assert result.ignore == ' \t'
+    assert grammars.save.call_count == 2
+
+
+# ** test: set_grammar_layout_rejected_profile_does_not_save
+@pytest.mark.parametrize('tab_size', [0, -1, False])
+def test_set_grammar_layout_rejected_profile_does_not_save(tab_size) -> None:
+    '''
+    Test that SetGrammarLayout with a profile the field rejects raises that
+    ValidationError, not a grammar error, and does not save.
+    '''
+
+    # Handle SetGrammarLayout with a non-positive tab size.
+    grammars = grammar_service([grammar('arithmetic')])
+    with pytest.raises(ValidationError):
+        DomainEvent.handle(
+            SetGrammarLayout,
+            dependencies={'grammar_service': grammars},
+            id='arithmetic',
+            layout={
+                'indent_token': 'INDENT',
+                'dedent_token': 'DEDENT',
+                'tab_size': tab_size,
+            },
+        )
+
+    # Assert nothing was saved.
+    grammars.save.assert_not_called()
+
+
+# ** test: fact_writers_require_fact_keyword
+@pytest.mark.parametrize('event_cls, keyword', [
+    (SetGrammarIgnore, 'ignore'),
+    (SetGrammarLayout, 'layout'),
+])
+def test_fact_writers_require_fact_keyword(event_cls, keyword) -> None:
+    '''
+    Test that a fact writer without its fact keyword raises
+    COMMAND_PARAMETER_REQUIRED and does not save.
+    '''
+
+    # Handle the event with only the id.
+    grammars = grammar_service([grammar('arithmetic')])
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            event_cls,
+            dependencies={'grammar_service': grammars},
+            id='arithmetic',
+        )
+
+    # Assert the framework's required-parameter error names the fact.
+    assert raised.value.error_code == tiferet_a.error.COMMAND_PARAMETER_REQUIRED_ID
+    assert raised.value.kwargs['parameters'] == [keyword]
+    grammars.save.assert_not_called()
+
+
+# ** test: fact_writers_require_only_id_through_decorator
+@pytest.mark.parametrize('event_cls, keyword', [
+    (SetGrammarIgnore, 'ignore'),
+    (SetGrammarLayout, 'layout'),
+])
+def test_fact_writers_require_only_id_through_decorator(event_cls, keyword) -> None:
+    '''
+    Test that parameters_required lists only id: a missing id is the only
+    decorator violation, even with a None fact.
+    '''
+
+    # Handle the event with a None id and a None fact.
+    grammars = grammar_service([grammar('arithmetic')])
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            event_cls,
+            dependencies={'grammar_service': grammars},
+            id=None,
+            **{keyword: None},
+        )
+
+    # Assert only id is reported missing.
+    assert raised.value.error_code == tiferet_a.error.COMMAND_PARAMETER_REQUIRED_ID
+    assert raised.value.kwargs['parameters'] == ['id']
+    grammars.save.assert_not_called()
+
+
+# ** test: fact_writers_need_only_grammar_service
+@pytest.mark.parametrize('event_cls, facts', [
+    (SetGrammarIgnore, {'ignore': ' '}),
+    (SetGrammarLayout, {'layout': None}),
+])
+def test_fact_writers_need_only_grammar_service(event_cls, facts) -> None:
+    '''
+    Test that a fact writer is built from GrammarService alone, raises
+    GRAMMAR_NOT_FOUND for a missing grammar, and runs no catalogue check.
+    '''
+
+    # Handle the event against a grammar that is not persisted.
+    grammars = grammar_service()
+    with pytest.raises(TiferetError) as raised:
+        DomainEvent.handle(
+            event_cls,
+            dependencies={'grammar_service': grammars},
+            id='missing',
+            **facts,
+        )
+    assert raised.value.error_code == a.error.GRAMMAR_NOT_FOUND_ID
+    grammars.save.assert_not_called()
+
+    # A successful write never lists the catalogue or checks parents.
+    grammars = grammar_service([grammar('arithmetic')])
+    DomainEvent.handle(
+        event_cls,
+        dependencies={'grammar_service': grammars},
+        id='arithmetic',
+        **facts,
+    )
+    grammars.list.assert_not_called()
+    grammars.exists.assert_not_called()
+    grammars.save.assert_called_once()
+
+
+# ** test_int: fact_writes_round_trip_through_repository
+def test_int_fact_writes_round_trip_through_repository(
+        grammar_repo: GrammarConfigRepository) -> None:
+    '''
+    Test fact writes against a real repository: exact strings and equal
+    profiles reload, an empty ignore reloads as '', and a clear is omitted
+    from the saved body and reloads as None.
+    '''
+
+    # Seed a grammar and set both facts.
+    grammar_repo.save(grammar('arithmetic'))
+    profile = layout_profile(tab_size=2)
+    DomainEvent.handle(
+        SetGrammarIgnore,
+        dependencies={'grammar_service': grammar_repo},
+        id='arithmetic',
+        ignore=' \t',
+    )
+    DomainEvent.handle(
+        SetGrammarLayout,
+        dependencies={'grammar_service': grammar_repo},
+        id='arithmetic',
+        layout=profile,
+    )
+
+    # Assert the reloaded grammar carries the exact string and an equal profile.
+    loaded = grammar_repo.get('arithmetic')
+    assert loaded.ignore == ' \t'
+    assert isinstance(loaded.layout, LayoutProfile)
+    assert loaded.layout.model_dump() == profile.model_dump()
+
+    # Set an empty ignore and assert it reloads as '', not None.
+    DomainEvent.handle(
+        SetGrammarIgnore,
+        dependencies={'grammar_service': grammar_repo},
+        id='arithmetic',
+        ignore='',
+    )
+    assert grammar_repo.get('arithmetic').ignore == ''
+
+    # Clear both facts and assert the saved body omits them.
+    DomainEvent.handle(
+        SetGrammarIgnore,
+        dependencies={'grammar_service': grammar_repo},
+        id='arithmetic',
+        ignore=None,
+    )
+    DomainEvent.handle(
+        SetGrammarLayout,
+        dependencies={'grammar_service': grammar_repo},
+        id='arithmetic',
+        layout=None,
+    )
+    raw = yaml.safe_load(Path(grammar_repo.config_file).read_text(encoding='utf-8'))
+    assert raw['grammars']['arithmetic'] == {
+        'parent_ids': [],
+        'start': 'expression',
+    }
+    loaded = grammar_repo.get('arithmetic')
+    assert loaded.ignore is None
+    assert loaded.layout is None
+
+
+# ** test_int: fact_writes_are_not_inherited
+def test_int_fact_writes_are_not_inherited(
+        grammar_repo: GrammarConfigRepository) -> None:
+    '''
+    Test that a child created under a parent with both facts, and then
+    re-parented, reloads with neither fact while the parent keeps both.
+    '''
+
+    # Add a parent with both facts through AddGrammar.
+    productions = production_service([production()])
+    profile = layout_profile()
+    DomainEvent.handle(
+        AddGrammar,
+        dependencies={
+            'grammar_service': grammar_repo,
+            'production_service': productions,
+        },
+        id='arithmetic',
+        start='expression',
+        ignore=' \t',
+        layout=profile,
+    )
+
+    # Add a child under that parent without its own facts.
+    DomainEvent.handle(
+        AddGrammar,
+        dependencies={
+            'grammar_service': grammar_repo,
+            'production_service': productions,
+        },
+        id='comments',
+        start='expression',
+        parent_ids=['arithmetic'],
+    )
+
+    # Update the child's parents and start without touching its facts.
+    DomainEvent.handle(
+        SetGrammarParentIds,
+        dependencies={
+            'grammar_service': grammar_repo,
+            'production_service': productions,
+        },
+        id='comments',
+        parent_ids=['arithmetic'],
+    )
+
+    # Assert the child reloads with no facts and the parent keeps both.
+    child = grammar_repo.get('comments')
+    assert child.ignore is None
+    assert child.layout is None
+    parent = grammar_repo.get('arithmetic')
+    assert parent.ignore == ' \t'
+    assert parent.layout.model_dump() == profile.model_dump()
+
+
+# ** test: fact_writers_do_not_consult_layout_filter
+def test_fact_writers_do_not_consult_layout_filter() -> None:
+    '''
+    Test that the grammar event module neither imports LayoutFilter nor
+    defines a combined or clear-only fact event.
+    '''
+
+    # Import the grammar event module.
+    from tiferet_ly.events import grammar as grammar_events
+
+    # Assert no filter dependency and no extra update types.
+    assert 'LayoutFilter' not in grammar_events.__dict__
+    for name in ('UpdateGrammar', 'ClearGrammarIgnore', 'ClearGrammarLayout', 'SetGrammarFacts'):
+        assert not hasattr(grammar_events, name)
+
