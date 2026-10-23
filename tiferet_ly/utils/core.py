@@ -271,7 +271,7 @@ class PlyReader:
 
         # Compile each complex pattern with the reflags lex.lex receives (0).
         walk = [
-            (name, re.compile(pattern, 0), action)
+            (name, re.compile(pattern, flags=0), action)
             for name, pattern, action in ordered
         ]
 
@@ -283,7 +283,20 @@ class PlyReader:
             for name, compiled, action in walk:
                 if compiled.match(t.lexer.lexdata, t.lexpos) is not None:
                     t.type = name
-                    return action(t)
+                    result = action(t)
+
+                    # Keep PLY's unknown-type message naming t_<rule>, not the dispatcher.
+                    if result and result.type not in t.lexer.lextokens_all:
+                        raise lex.LexError(
+                            "%s:%d: Rule '%s' returned an unknown token type '%s'" % (
+                                action.__code__.co_filename,
+                                action.__code__.co_firstlineno,
+                                action.__name__,
+                                result.type,
+                            ),
+                            t.lexer.lexdata[t.lexer.lexmatch.end():],
+                        )
+                    return result
             return t
 
         # Name the dispatcher clear of t_error, t_ignore, t_eof, and t_<selected name>.

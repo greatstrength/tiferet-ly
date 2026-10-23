@@ -25,6 +25,7 @@ from tiferet_ly.utils.core import (
     ACTION_EXECUTION_FAILED_ID,
     LEX_ERROR_ID,
     PARSE_ERROR_ID,
+    READER_BUILD_FAILED_ID,
     PlyReader,
 )
 from tiferet_ly.utils.lex import PlyLexer
@@ -241,6 +242,26 @@ def test_keyword_and_identifier_follow_declared_order() -> None:
     )) == ['ID']
 
 
+# ** test: keyword_prefix_then_identifier_rest
+def test_keyword_prefix_then_identifier_rest() -> None:
+    '''
+    Test that IF declared before ID takes the if prefix of iffy, and ID
+    takes the rest.
+    '''
+
+    # IF before ID on iffy.
+    result = tokenize(
+        [complex_token('IF', 'if'), complex_token('ID', '[a-z]+')],
+        'iffy',
+    )
+
+    # Assert IF 'if' then ID 'fy'.
+    assert [(lexeme.type, lexeme.value) for lexeme in result] == [
+        ('IF', 'if'),
+        ('ID', 'fy'),
+    ]
+
+
 # ** test: non_matching_complex_rule_is_skipped
 def test_non_matching_complex_rule_is_skipped() -> None:
     '''
@@ -346,6 +367,55 @@ def test_winner_action_sees_declared_type() -> None:
             [complex_token('Z_FIRST', action="t.type = 'NOPE'\nreturn t")],
             'x',
         )
+    assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
+    assert raised.value.kwargs['rule_name'] is None
+
+
+# ** test: unknown_type_message_names_original_rule
+def test_unknown_type_message_names_original_rule() -> None:
+    '''
+    Test that an unknown t.type keeps PLY's message naming t_<rule>, and is
+    still ACTION_EXECUTION_FAILED with rule_name null.
+    '''
+
+    # The winning action assigns a type absent from module.tokens.
+    token = complex_token('Z_FIRST', action="t.type = 'NOPE'\nreturn t")
+    _name, func = RuleTranslator.translate_token_rule(token)
+
+    # Tokenize text the action matches.
+    with pytest.raises(ServiceError) as raised:
+        tokenize([token, complex_token('A_SECOND')], 'xy')
+
+    # Assert the base message and the null attribution.
+    assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
+    assert raised.value.kwargs['rule_name'] is None
+    assert raised.value.__cause__.args[0] == (
+        "%s:%d: Rule '%s' returned an unknown token type '%s'" % (
+            '<tiferet_ly:t_Z_FIRST>',
+            func.__code__.co_firstlineno,
+            't_Z_FIRST',
+            'NOPE',
+        )
+    )
+    assert raised.value.__cause__.text == 'y'
+
+
+# ** test: walk_without_rematch_falls_back_to_unknown_type
+def test_walk_without_rematch_falls_back_to_unknown_type() -> None:
+    '''
+    Test the reachable fallback: a conditional-group pattern that the
+    alternation matches but the walk does not re-match fails as
+    ACTION_EXECUTION_FAILED with rule_name null.
+    '''
+
+    # The conditional refers to a group number the master renumbers.
+    tokens = [complex_token('COND', '(a)?(?(1)b|c)')]
+
+    # Tokenize text only the master alternation accepts.
+    with pytest.raises(ServiceError) as raised:
+        tokenize(tokens, 'ac')
+
+    # Assert the existing unknown-type failure with null attribution.
     assert raised.value.error_code == ACTION_EXECUTION_FAILED_ID
     assert raised.value.kwargs['rule_name'] is None
 
@@ -658,3 +728,19 @@ def test_public_surface_is_unchanged() -> None:
     assert RuleTranslator.translate_token_rule(
         SyntheticTokenRuleAggregate(name='INDENT', grammar_id='order'),
     ) is None
+
+
+# ** test: duplicate_inner_group_names_fail_at_build
+def test_duplicate_inner_group_names_fail_at_build() -> None:
+    '''
+    Test the pinned known limitation: inner named groups must be unique
+    across the declared complex token rules, or the build fails.
+    '''
+
+    # Two complex rules reuse the inner group name g.
+    tokens = [complex_token('A', '(?P<g>a)'), complex_token('B', '(?P<g>b)')]
+
+    # Assert the joined dispatcher pattern fails to build.
+    with pytest.raises(ServiceError) as raised:
+        tokenize(tokens, 'a')
+    assert raised.value.error_code == READER_BUILD_FAILED_ID
