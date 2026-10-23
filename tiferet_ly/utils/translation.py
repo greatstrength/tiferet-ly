@@ -7,8 +7,10 @@ import re
 from textwrap import dedent, indent
 from typing import Callable
 
-# ** app
+# ** infra
 from tiferet.interfaces.core import ServiceError
+
+# ** app
 from tiferet_ly.assets.translation import (
     ACTION_COMPILATION_FAILED_ID,
     RULE_PATTERN_INVALID_ID,
@@ -21,6 +23,7 @@ from tiferet_ly.mappers.production import (
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 
 # *** utils
@@ -30,12 +33,13 @@ class RuleTranslator:
     '''
     Translate declared rules into names and values a reader can use.
 
-    Simple tokens keep their pattern text. Complex tokens and complex
-    productions become callables through the shared action compiler. A
-    simple production with one right-hand-side symbol becomes a
-    pass-through manufactured at translation time, carrying its
-    specification as the callable docstring. The utility does not select
-    a grammar, persist rules, or import PLY.
+    Simple tokens keep their pattern text. A synthetic token translates to
+    None and is not compiled. Complex tokens and complex productions become
+    callables through the shared action compiler. A simple production with
+    one right-hand-side symbol becomes a pass-through manufactured at
+    translation time, carrying its specification as the callable
+    docstring. The utility does not select a grammar, persist rules, or
+    import PLY.
     '''
 
     # * attribute: default_rewrites
@@ -137,25 +141,31 @@ class RuleTranslator:
     @classmethod
     def translate_token_rule(
             cls,
-            rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate,
+            rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate | SyntheticTokenRuleAggregate,
             rewrites: dict | None = None,
-        ) -> tuple[str, str | Callable]:
+        ) -> tuple[str, str | Callable] | None:
         '''
         Translate one declared token rule into a reader name and value.
 
-        A simple token returns its attribute name and the pattern text
-        unchanged. A complex token returns a callable from the shared
-        action compiler. An invalid complex pattern is rejected before
-        the action is compiled. Caller rewrites are forwarded only for a
-        complex token.
+        A synthetic token returns None: it is not passed to re.compile,
+        is not compiled, and ignores rewrites. A simple token returns its
+        attribute name and the pattern text unchanged. A complex token
+        returns a callable from the shared action compiler. An invalid
+        complex pattern is rejected before the action is compiled. Caller
+        rewrites are forwarded only for a complex token.
 
-        :param rule: A simple or complex token aggregate.
-        :type rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate
+        :param rule: A simple, complex, or synthetic token aggregate.
+        :type rule: SimpleTokenRuleAggregate | ComplexTokenRuleAggregate | SyntheticTokenRuleAggregate
         :param rewrites: Optional rewrite table forwarded to the compiler.
         :type rewrites: dict | None
-        :return: The ``t_`` name and either the pattern or a callable.
-        :rtype: tuple[str, str | Callable]
+        :return: The ``t_`` name and either the pattern or a callable, or
+            None for a synthetic token.
+        :rtype: tuple[str, str | Callable] | None
         '''
+
+        # A synthetic token contributes no reader attribute. Do not compile it.
+        if isinstance(rule, SyntheticTokenRuleAggregate):
+            return None
 
         # Name the reader attribute from the bare declared token name.
         token_name = f't_{rule.name}'

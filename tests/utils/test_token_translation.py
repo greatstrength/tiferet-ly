@@ -6,17 +6,19 @@
 import ast
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 # ** infra
 import pytest
-
-# ** app
 from tiferet import use_tester
 from tiferet.interfaces.core import ServiceError
+
+# ** app
 from tiferet_ly.assets.translation import RULE_PATTERN_INVALID_ID
 from tiferet_ly.mappers.token import (
     ComplexTokenRuleAggregate,
     SimpleTokenRuleAggregate,
+    SyntheticTokenRuleAggregate,
 )
 from tiferet_ly.utils.translation import RuleTranslator
 
@@ -211,6 +213,73 @@ class TestTokenTranslation:
 
         # Derivation keeps both names and does not sort or filter.
         assert RuleTranslator.derive_tokens(rules) == ['PLUS', 'NUMBER']
+
+    # * test: synthetic_token_translates_to_none
+    def test_synthetic_token_translates_to_none(self, test_ctx, session):
+        '''
+        Translate a synthetic token to None without compiling anything.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # A synthetic rule has a name and a grammar, and nothing to match.
+        class Unused:
+            pass
+        rule = SyntheticTokenRuleAggregate(name='INDENT', grammar_id='arithmetic')
+
+        # Omitted rewrites return bare None without calling re.compile.
+        with patch('tiferet_ly.utils.translation.re.compile') as compiled:
+            result = RuleTranslator.translate_token_rule(rule)
+            assert result is None
+            compiled.assert_not_called()
+
+        # Positional rewrites are still rewrites, and are ignored.
+        with patch('tiferet_ly.utils.translation.re.compile') as compiled:
+            result = RuleTranslator.translate_token_rule(rule, {'$unused': Unused})
+            assert result is None
+            compiled.assert_not_called()
+
+        # Keyword rewrites are ignored the same way.
+        with patch('tiferet_ly.utils.translation.re.compile') as compiled:
+            result = RuleTranslator.translate_token_rule(rule, rewrites={'$unused': Unused})
+            assert result is None
+            compiled.assert_not_called()
+
+    # * test: derive_tokens_includes_synthetic_name
+    def test_derive_tokens_includes_synthetic_name(self, test_ctx, session):
+        '''
+        Keep a synthetic token name in derived names, in input order.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # INDENT is synthetic and sits between a simple and a complex rule.
+        rules = [
+            SimpleTokenRuleAggregate(
+                name='PLUS',
+                grammar_id='arithmetic',
+                pattern='+',
+            ),
+            SyntheticTokenRuleAggregate(
+                name='INDENT',
+                grammar_id='arithmetic',
+            ),
+            ComplexTokenRuleAggregate(
+                name='NUMBER',
+                grammar_id='logic',
+                pattern=r'\d+',
+                action='t.value = int(t.value)',
+            ),
+        ]
+
+        # Derivation keeps every name and does not sort or drop INDENT.
+        assert RuleTranslator.derive_tokens(rules) == ['PLUS', 'INDENT', 'NUMBER']
 
     # * test: does_not_import_ply_or_define_compiler
     def test_does_not_import_ply_or_define_compiler(self, test_ctx, session):
