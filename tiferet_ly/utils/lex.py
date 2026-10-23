@@ -5,13 +5,16 @@
 # ** core
 import types
 
-# ** app
+# ** infra
 from tiferet.interfaces.core import ServiceError
+
+# ** app
 from tiferet_ly.assets.reader import ACTION_EXECUTION_FAILED_ID
 from tiferet_ly.interfaces.lexer import LexerService
 from tiferet_ly.mappers.lexeme import LexemeAggregate
 from tiferet_ly.utils import core as reader_core
 from tiferet_ly.utils.core import PlyReader
+from tiferet_ly.utils.layout import LayoutFilter
 
 # *** utils
 
@@ -21,7 +24,9 @@ class PlyLexer(PlyReader, LexerService):
     Read declared text as lexeme aggregates, not as reader tokens.
 
     Each call builds a fresh lexer from the selected token set. Optional
-    rewrites are passed into token translation.
+    rewrites are passed into token translation. A layout on the resolved
+    grammar is applied after a successful read. No layout leaves that
+    lexeme list unchanged.
     '''
 
     # * method: tokenize
@@ -44,6 +49,11 @@ class PlyLexer(PlyReader, LexerService):
         A non-``ServiceError`` exception from ``lexer.token()`` raises
         ``ACTION_EXECUTION_FAILED_ID``. ``ServiceError`` values, including
         ``LEX_ERROR_ID``, pass through unchanged.
+
+        When the resolved grammar's ``layout`` is not ``None``, the return
+        value is ``LayoutFilter.apply(lexemes, grammar.layout, text)``. When
+        ``layout`` is ``None``, the list built by ``LexemeAggregate.new`` is
+        returned unchanged. ``layout`` is not taken from ``parent_ids``.
 
         :param grammar_id: The grammar that owns the read.
         :type grammar_id: str
@@ -116,6 +126,13 @@ class PlyLexer(PlyReader, LexerService):
                 grammar_id=grammar_id,
                 **attribution,
             )
+
+        # Read layout from the resolved grammar only, never from parent_ids.
+        grammar = PlyReader.resolve_grammar(grammar_id, grammars)
+
+        # Apply a declared profile, even to an empty read. Only None skips it.
+        if grammar.layout is not None:
+            lexemes = LayoutFilter.apply(lexemes, grammar.layout, text)
 
         # Return aggregates, not PLY tokens.
         return lexemes

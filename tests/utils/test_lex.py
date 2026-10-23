@@ -5,19 +5,21 @@
 # ** core
 import ast
 from pathlib import Path
+from typing import Callable
 from unittest.mock import patch
 
 # ** infra
 import pytest
-
-# ** app
 from tiferet import use_tester
 from tiferet.interfaces.core import ServiceError
+
+# ** app
 from tiferet_ly.assets.reader import (
     ACTION_EXECUTION_FAILED_ID,
     LEX_ERROR_ID,
     READER_BUILD_FAILED_ID,
 )
+from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.mappers.lexeme import LexemeAggregate
 from tiferet_ly.mappers.token import (
@@ -26,7 +28,13 @@ from tiferet_ly.mappers.token import (
 )
 from tiferet_ly.utils import core as core_utils
 from tiferet_ly.utils import lex as lex_utils
+from tiferet_ly.utils.layout import LayoutFilter
 from tiferet_ly.utils.lex import PlyLexer
+
+# *** constants
+
+# ** constant: layout_text
+_LAYOUT_TEXT = '@ x:\n    y'
 
 # *** functions
 
@@ -86,6 +94,88 @@ def _spans(lexemes: list[LexemeAggregate]) -> list[tuple]:
         (lexeme.type, lexeme.value, lexeme.lineno, lexeme.lexpos)
         for lexeme in lexemes
     ]
+
+# ** function: layout_tokens
+def _layout_tokens() -> list:
+    '''
+    Build the shared block, identifier, colon, and newline tokens.
+
+    :return: The token aggregates, in input order, all owned by expr.
+    :rtype: list
+    '''
+
+    # Keep the input order. NEWLINE advances the line and returns its token.
+    return [
+        SimpleTokenRuleAggregate(
+            name='BLOCK',
+            grammar_id='expr',
+            pattern='@',
+        ),
+        ComplexTokenRuleAggregate(
+            name='IDENTIFIER',
+            grammar_id='expr',
+            pattern='[a-zA-Z_]+',
+            action='return t',
+        ),
+        SimpleTokenRuleAggregate(
+            name='COLON',
+            grammar_id='expr',
+            pattern=':',
+        ),
+        ComplexTokenRuleAggregate(
+            name='NEWLINE',
+            grammar_id='expr',
+            pattern=r'\n',
+            action='t.lexer.lineno += 1\nreturn t',
+        ),
+    ]
+
+# ** function: layout_profile
+def _layout_profile(indent_token: str = 'INDENT', dedent_token: str = 'DEDENT') -> LayoutProfile:
+    '''
+    Build the shared layout profile, or the parent decoy with other names.
+
+    :param indent_token: The synthetic indent name.
+    :type indent_token: str
+    :param dedent_token: The synthetic dedent name.
+    :type dedent_token: str
+    :return: The layout profile.
+    :rtype: LayoutProfile
+    '''
+
+    # Only the synthetic names differ between the target and the decoy.
+    return LayoutProfile(
+        block_tokens=['BLOCK'],
+        open_delimiters=[],
+        close_delimiters=[],
+        newline_token='NEWLINE',
+        suppress_newline_in_delimiters=True,
+        indent_token=indent_token,
+        dedent_token=dedent_token,
+        tab_size=4,
+    )
+
+# ** function: recording_apply
+def _recording_apply(returned: list) -> Callable:
+    '''
+    Wrap the real LayoutFilter.apply so each list it returns is recorded.
+
+    :param returned: The list that receives each value apply returns, in call order.
+    :type returned: list
+    :return: A callable with the apply signature, for use as a patch wraps target.
+    :rtype: Callable
+    '''
+
+    # Capture the real filter now, before a patch replaces the class attribute.
+    real_apply = LayoutFilter.apply
+
+    # Record each returned list, then hand back that same object.
+    def record(*args):
+        returned.append(real_apply(*args))
+        return returned[-1]
+
+    # Return the wrapper for patch to call in place of apply.
+    return record
 
 # *** tests
 
@@ -403,3 +493,169 @@ class TestPlyLexer:
         assert error.kwargs['lexpos'] == 2
         assert error.kwargs['value'] == '@'
         assert 'rule_name' not in error.kwargs
+
+    # * test: declared_layout_is_applied
+    def test_declared_layout_is_applied(self, test_ctx, session):
+        '''
+        Apply the target grammar's own profile, not a parent's.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The parent carries a decoy profile. The target carries its own.
+        base = _grammar('base')
+        base.layout = _layout_profile(
+            indent_token='PARENT_INDENT',
+            dedent_token='PARENT_DEDENT',
+        )
+        expr = _grammar('expr', ['base'])
+        expr.ignore = ' '
+        expr.layout = _layout_profile()
+
+        # Wrap the filter so the call and its returned list are both observed.
+        returned = []
+        recording_apply = _recording_apply(returned)
+        with patch('tiferet_ly.utils.lex.LayoutFilter.apply', wraps=recording_apply) as apply:
+            result = PlyLexer().tokenize('expr', _LAYOUT_TEXT, _layout_tokens(), [], [base, expr])
+
+        # The filter is called once with the recognized list, the target profile, and the text.
+        assert apply.call_count == 1
+        lexemes, profile, text = apply.call_args.args
+        assert [lexeme.type for lexeme in lexemes] == [
+            'BLOCK',
+            'IDENTIFIER',
+            'COLON',
+            'NEWLINE',
+            'IDENTIFIER',
+        ]
+        assert [lexeme.value for lexeme in lexemes] == ['@', 'x', ':', '\n', 'y']
+        assert profile is expr.layout
+        assert text == _LAYOUT_TEXT
+        assert result is returned[0]
+
+        # Indent and dedent come from the target profile and carry no value.
+        types = [lexeme.type for lexeme in result]
+        assert 'INDENT' in types
+        assert 'DEDENT' in types
+        assert all(
+            lexeme.value is None
+            for lexeme in result
+            if lexeme.type in ('INDENT', 'DEDENT')
+        )
+        assert ('PARENT_INDENT' in types or 'PARENT_DEDENT' in types) is False
+
+        # Every returned object is a lexeme aggregate with no PLY base.
+        assert all(type(lexeme) is LexemeAggregate for lexeme in result)
+        assert all(lexeme.__class__.__module__ == 'tiferet_ly.mappers.lexeme' for lexeme in result)
+        assert all(
+            not base_cls.__module__.startswith('ply')
+            for lexeme in result
+            for base_cls in type(lexeme).__mro__
+        )
+
+    # * test: absent_layout_is_unchanged
+    def test_absent_layout_is_unchanged(self, test_ctx, session):
+        '''
+        Return the unfiltered stream when the target has no profile.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # Only the parent carries a profile. The target's layout stays None.
+        base = _grammar('base')
+        base.layout = _layout_profile(
+            indent_token='PARENT_INDENT',
+            dedent_token='PARENT_DEDENT',
+        )
+        expr = _grammar('expr', ['base'])
+        expr.ignore = ' '
+        with patch('tiferet_ly.utils.lex.LayoutFilter.apply') as apply:
+            result = PlyLexer().tokenize('expr', _LAYOUT_TEXT, _layout_tokens(), [], [base, expr])
+
+        # The filter is not called, and the recognized stream is returned as read.
+        apply.assert_not_called()
+        types = [lexeme.type for lexeme in result]
+        assert types == ['BLOCK', 'IDENTIFIER', 'COLON', 'NEWLINE', 'IDENTIFIER']
+        assert [lexeme.value for lexeme in result] == ['@', 'x', ':', '\n', 'y']
+        for name in ('INDENT', 'DEDENT', 'PARENT_INDENT', 'PARENT_DEDENT'):
+            assert name not in types
+
+        # Every returned object is a lexeme aggregate with no PLY base.
+        assert all(type(lexeme) is LexemeAggregate for lexeme in result)
+        assert all(lexeme.__class__.__module__ == 'tiferet_ly.mappers.lexeme' for lexeme in result)
+        assert all(
+            not base_cls.__module__.startswith('ply')
+            for lexeme in result
+            for base_cls in type(lexeme).__mro__
+        )
+
+    # * test: empty_read_with_layout_still_applies
+    def test_empty_read_with_layout_still_applies(self, test_ctx, session):
+        '''
+        Call the filter on an empty successful read when a profile is present.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The target has a profile and no parent. The text is empty.
+        expr = _grammar('expr')
+        expr.layout = _layout_profile()
+        tokens = [
+            SimpleTokenRuleAggregate(
+                name='WORD',
+                grammar_id='expr',
+                pattern='[A-Z]+',
+            ),
+        ]
+
+        # Wrap the filter so the call and its returned list are both observed.
+        returned = []
+        recording_apply = _recording_apply(returned)
+        with patch('tiferet_ly.utils.lex.LayoutFilter.apply', wraps=recording_apply) as apply:
+            result = PlyLexer().tokenize('expr', '', tokens, [], [expr])
+
+        # The empty list, the target profile, and the empty text reach the filter.
+        assert apply.call_count == 1
+        lexemes, profile, text = apply.call_args.args
+        assert lexemes == []
+        assert profile is expr.layout
+        assert text == ''
+        assert result is returned[0]
+
+    # * test: layout_is_not_applied_when_tokenization_fails
+    def test_layout_is_not_applied_when_tokenization_fails(self, test_ctx, session):
+        '''
+        Leave the layout step unreached when the read raises a lexical error.
+
+        :param test_ctx: The bound generic tester context.
+        :type test_ctx: GenericTesterContext
+        :param session: A fresh test session.
+        :type session: TestSessionContext
+        '''
+
+        # The word matches. The following character does not.
+        expr = _grammar('expr')
+        expr.layout = _layout_profile()
+        tokens = [
+            SimpleTokenRuleAggregate(
+                name='WORD',
+                grammar_id='expr',
+                pattern='[A-Z]+',
+            ),
+        ]
+        with patch('tiferet_ly.utils.lex.LayoutFilter.apply') as apply:
+            with pytest.raises(ServiceError) as raised:
+                PlyLexer().tokenize('expr', 'AB@', tokens, [], [expr])
+
+        # The lexical error propagates, and the filter is never called.
+        assert raised.value.error_code == LEX_ERROR_ID
+        apply.assert_not_called()
