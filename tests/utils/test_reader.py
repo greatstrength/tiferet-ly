@@ -12,6 +12,7 @@ import yaml
 # ** app
 from tiferet import App
 from tiferet.interfaces.core import ServiceError
+from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.mappers.ast import AstNodeAggregate
 from tiferet_ly.mappers.grammar import GrammarAggregate
 from tiferet_ly.mappers.lexeme import LexemeAggregate
@@ -24,6 +25,7 @@ from tiferet_ly.mappers.token import (
     SimpleTokenRuleAggregate,
     SyntheticTokenRuleAggregate,
 )
+from tiferet_ly.utils import lex as lex_module
 from tiferet_ly.utils.core import (
     ACTION_EXECUTION_FAILED_ID,
     GRAMMAR_NOT_FOUND_ID,
@@ -223,8 +225,6 @@ def test_tokenize_applies_declared_layout_profile() -> None:
     '''
 
     # A minimal token set: a @ block marker, bare identifiers, colon, newline.
-    from tiferet_ly.domain.layout import LayoutProfile
-
     target = grammar()
     target.ignore = ' '
     target.layout = LayoutProfile(
@@ -291,9 +291,6 @@ def test_tokenize_passes_declared_layout_through_unwrapped(monkeypatch) -> None:
     '''
 
     # Declare a layout profile on the target grammar.
-    from tiferet_ly.domain.layout import LayoutProfile
-    from tiferet_ly.utils import lex as lex_module
-
     target = grammar()
     target.ignore = ' '
     target.layout = LayoutProfile(indent_token='INDENT', dedent_token='DEDENT')
