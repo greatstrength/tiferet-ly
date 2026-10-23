@@ -35,7 +35,6 @@ def test_render_result_returns_string() -> None:
     assert as_node == node.format()
     assert isinstance(as_node, str)
 
-
 # ** test: render_result_is_passthrough_when_flag_off
 def test_render_result_is_passthrough_when_flag_off() -> None:
     '''
@@ -52,7 +51,6 @@ def test_render_result_is_passthrough_when_flag_off() -> None:
     assert type(omitted) is int
     assert flagged_off is node
 
-
 # ** test: render_events_do_not_import_ply_or_write
 def test_render_events_do_not_import_ply_or_write() -> None:
     '''
@@ -67,7 +65,6 @@ def test_render_events_do_not_import_ply_or_write() -> None:
     assert not hasattr(RenderResult, 'save')
     assert not hasattr(RenderResult, 'delete')
     assert not hasattr(render_events, 'ReturnResult')
-
 
 # ** test: parse_feature_wires_render_result_step
 def test_parse_feature_wires_render_result_step() -> None:
@@ -109,7 +106,6 @@ def test_parse_feature_wires_render_result_step() -> None:
     assert 'data_key' not in lex['steps'][-1]
     assert 'render_result' not in lex
     assert get_type_hints(ParserService.parse)['return'] is Any
-
 
 # ** test: parse_cli_render_result_dests_to_flag
 def test_parse_cli_render_result_dests_to_flag() -> None:

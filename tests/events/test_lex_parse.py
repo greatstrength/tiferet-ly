@@ -88,7 +88,6 @@ def test_lex_text_passes_catalogues_to_service() -> None:
     )
     assert result == [lexeme]
 
-
 # ** test: parse_text_passes_catalogues_to_service
 def test_parse_text_passes_catalogues_to_service() -> None:
     '''
