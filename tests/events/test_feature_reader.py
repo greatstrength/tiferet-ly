@@ -8,9 +8,11 @@ from pathlib import Path
 # ** infra
 import pytest
 import yaml
+from tiferet import App
+from tiferet.assets.core import TiferetAPIError
+from tiferet.interfaces.core import ServiceError
 
 # ** app
-from tiferet import App
 from tiferet_ly.mappers.lexeme import LexemeAggregate
 from tiferet_ly.utils.lex import PlyLexer
 from tiferet_ly.utils.parse import PlyParser
@@ -170,6 +172,7 @@ def number(value):
     # Return the value unchanged.
     return value
 
+# *** classes
 
 # ** class: num
 class Num(int):
@@ -272,7 +275,7 @@ def test_parse_feature_without_text_or_lexemes_fails_in_service(tmp_path, monkey
     calls = spy(monkeypatch, PlyParser, 'parse')
 
     # Run with only the grammar id.
-    with pytest.raises(Exception) as raised:
+    with pytest.raises(ServiceError) as raised:
         app.run('parse.default', data={'grammar_id': 'arith'})
 
     # Assert the service rule, not request validation, rejected it.
@@ -327,7 +330,7 @@ def test_features_reject_non_dict_rewrites(tmp_path, monkeypatch, feature_id) ->
     parse_calls = spy(monkeypatch, PlyParser, 'parse')
 
     # Run with a list as rewrites.
-    with pytest.raises(Exception) as raised:
+    with pytest.raises(TiferetAPIError) as raised:
         app.run(
             feature_id,
             data={'grammar_id': 'arith', 'text': '1', 'rewrites': ['not', 'a', 'dict']},

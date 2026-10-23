@@ -8,10 +8,11 @@ from unittest.mock import Mock
 
 # ** infra
 import pytest
-
-# ** app
+from tiferet.assets.core import TiferetError
 from tiferet.events.core import DomainEvent
 from tiferet.interfaces.core import ServiceError
+
+# ** app
 from tiferet_ly.interfaces.lexer import LexerService
 from tiferet_ly.interfaces.parser import ParserService
 from tiferet_ly.events.lex import LexText
@@ -46,6 +47,7 @@ def catalogues() -> tuple:
     grammars = [GrammarAggregate(id='arith', parent_ids=[], start='expr')]
     return tokens, productions, grammars
 
+# *** classes
 
 # ** class: shorthand
 class Shorthand:
@@ -182,7 +184,7 @@ def test_lex_text_still_requires_text(text) -> None:
     lexer_service = Mock()
 
     # Handle LexText and expect the required-parameter failure.
-    with pytest.raises(Exception) as raised:
+    with pytest.raises(TiferetError) as raised:
         DomainEvent.handle(
             LexText,
             dependencies={'lexer_service': lexer_service},

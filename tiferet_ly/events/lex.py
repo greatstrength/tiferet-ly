@@ -5,8 +5,10 @@
 # ** core
 from typing import Dict, List, Optional
 
-# ** app
+# ** infra
 from tiferet.events.core import DomainEvent
+
+# ** app
 from ..interfaces.lexer import LexerService
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate

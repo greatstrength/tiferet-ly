@@ -5,8 +5,10 @@
 # ** core
 from typing import Any, Dict, List, Optional
 
-# ** app
+# ** infra
 from tiferet.events.core import DomainEvent
+
+# ** app
 from ..interfaces.parser import ParserService
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate
@@ -46,9 +48,9 @@ class ParseText(DomainEvent):
     def execute(self,
             grammar_id: str,
             text: Optional[str] = None,
-            tokens: List[TokenRuleAggregate] = None,
-            productions: List[ProductionRuleAggregate] = None,
-            grammars: List[GrammarAggregate] = None,
+            tokens: Optional[List[TokenRuleAggregate]] = None,
+            productions: Optional[List[ProductionRuleAggregate]] = None,
+            grammars: Optional[List[GrammarAggregate]] = None,
             lexemes: Optional[List[LexemeAggregate]] = None,
             rewrites: Optional[Dict[str, type]] = None,
             **kwargs) -> Any:
