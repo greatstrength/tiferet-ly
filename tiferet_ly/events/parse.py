@@ -3,14 +3,18 @@
 # *** imports
 
 # ** core
-from typing import Any, List
+from typing import Any, Dict, List, Optional
+
+# ** infra
+from tiferet.events.core import DomainEvent
 
 # ** app
-from tiferet.events.core import DomainEvent
 from ..interfaces.parser import ParserService
 from ..mappers.grammar import GrammarAggregate
+from ..mappers.lexeme import LexemeAggregate
 from ..mappers.production import ProductionRuleAggregate
 from ..mappers.token import TokenRuleAggregate
+from .core import parameters_required
 
 # *** events
 
@@ -36,33 +40,41 @@ class ParseText(DomainEvent):
         self.parser_service = parser_service
 
     # * method: execute
-    @DomainEvent.parameters_required([
+    @parameters_required([
         'grammar_id',
-        'text',
         'tokens',
         'productions',
         'grammars',
     ])
     def execute(self,
             grammar_id: str,
-            text: str,
-            tokens: List[TokenRuleAggregate],
-            productions: List[ProductionRuleAggregate],
-            grammars: List[GrammarAggregate],
+            text: Optional[str] = None,
+            tokens: Optional[List[TokenRuleAggregate]] = None,
+            productions: Optional[List[ProductionRuleAggregate]] = None,
+            grammars: Optional[List[GrammarAggregate]] = None,
+            lexemes: Optional[List[LexemeAggregate]] = None,
+            rewrites: Optional[Dict[str, type]] = None,
             **kwargs) -> Any:
         '''
-        Parse text through the injected parser service.
+        Parse text, or a recognized lexeme stream, through the parser service.
+
+        Exactly one of text or lexemes is the service's rule, not this
+        event's; both are forwarded as given.
 
         :param grammar_id: The target grammar identifier.
         :type grammar_id: str
-        :param text: The source text to parse.
-        :type text: str
+        :param text: The source text to parse, or None for a lexeme stream.
+        :type text: Optional[str]
         :param tokens: The collected token catalogue.
         :type tokens: List[TokenRuleAggregate]
         :param productions: The collected production catalogue.
         :type productions: List[ProductionRuleAggregate]
         :param grammars: The collected grammar catalogue.
         :type grammars: List[GrammarAggregate]
+        :param lexemes: Optional recognized lexeme stream, forwarded as given.
+        :type lexemes: Optional[List[LexemeAggregate]]
+        :param rewrites: Optional action shorthand bindings, forwarded as given.
+        :type rewrites: Optional[Dict[str, type]]
         :param kwargs: Additional keyword arguments.
         :type kwargs: dict
         :return: Whatever the start-symbol action left in p[0].
@@ -76,4 +88,6 @@ class ParseText(DomainEvent):
             tokens,
             productions,
             text,
+            lexemes=lexemes,
+            rewrites=rewrites,
         )

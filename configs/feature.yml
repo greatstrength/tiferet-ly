@@ -3,6 +3,10 @@ features:
     default:
       name: Lex
       description: Tokenize text against a declared grammar.
+      params_schema:
+        rewrites:
+          type: dict
+          required: false
       steps:
         - &list_tokens
           service_id: list_tokens
@@ -17,14 +21,19 @@ features:
   parse:
     default:
       name: Parse
-      description: Parse text against a declared grammar.
+      description: Parse text, or a recognized lexeme stream supplied as lexemes, against a declared grammar.
       params_schema:
         grammar_id: str
-        text: str
+        text:
+          type: str
+          required: false
         render_result:
           type: bool
           required: false
           default: false
+        rewrites:
+          type: dict
+          required: false
       steps:
         - *list_tokens
         - &list_productions
