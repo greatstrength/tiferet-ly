@@ -2,17 +2,17 @@ services:
   token_service:
     module_path: tiferet_ly.repos.token
     class_name: TokenConfigRepository
-    parameters:
+    params:
       token_config: configs/tokens.yml
   production_service:
     module_path: tiferet_ly.repos.production
     class_name: ProductionConfigRepository
-    parameters:
+    params:
       production_config: configs/productions.yml
   grammar_service:
     module_path: tiferet_ly.repos.grammar
     class_name: GrammarConfigRepository
-    parameters:
+    params:
       grammar_config: configs/grammars.yml
   lexer_service:
     module_path: tiferet_ly.utils.lex
