@@ -6,8 +6,10 @@
 from abc import abstractmethod
 from typing import Dict, List, Optional
 
-# ** app
+# ** infra
 from tiferet import Service
+
+# ** app
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate
 from ..mappers.token import TokenRuleAggregate

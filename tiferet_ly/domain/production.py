@@ -4,8 +4,6 @@
 
 # ** infra
 from pydantic import Field
-
-# ** app
 from tiferet.domain.core import DomainObject
 
 # *** models

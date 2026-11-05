@@ -7,9 +7,9 @@ from typing import Any, ClassVar, Dict, Optional, Union
 
 # ** infra
 from pydantic import Field
+from tiferet import TransferObject
 
 # ** app
-from tiferet import TransferObject
 from ..domain.production import (
     ComplexProductionRule,
     ProductionRule,

@@ -7,8 +7,10 @@ import re
 import textwrap
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
-# ** app
+# ** infra
 from tiferet.interfaces.core import ServiceError
+
+# ** app
 from ..mappers.ast import AstNodeAggregate
 from ..mappers.production import (
     ProductionRuleAggregate,

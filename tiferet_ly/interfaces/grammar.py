@@ -6,8 +6,10 @@
 from abc import abstractmethod
 from typing import List, Optional
 
-# ** app
+# ** infra
 from tiferet import Service
+
+# ** app
 from ..mappers.grammar import GrammarAggregate
 
 # *** interfaces

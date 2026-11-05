@@ -5,8 +5,10 @@
 # ** core
 from typing import Any
 
-# ** app
+# ** infra
 from tiferet.events.core import DomainEvent
+
+# ** app
 from ..utils.render import ResultRenderer
 
 # *** events

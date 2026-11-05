@@ -10,9 +10,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # ** infra
 from ply import lex
+from tiferet.interfaces.core import ServiceError
 
 # ** app
-from tiferet.interfaces.core import ServiceError
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.token import TokenRuleAggregate
 from .grammar import GrammarRuleSelector

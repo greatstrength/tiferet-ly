@@ -5,7 +5,7 @@
 # ** core
 from typing import Any, Dict, List
 
-# ** app
+# ** infra
 from tiferet import Aggregate
 
 # *** functions

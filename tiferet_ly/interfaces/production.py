@@ -6,8 +6,10 @@
 from abc import abstractmethod
 from typing import List, Optional, Union
 
-# ** app
+# ** infra
 from tiferet import Service
+
+# ** app
 from ..mappers.production import (
     ComplexProductionRuleAggregate,
     SimpleProductionRuleAggregate,

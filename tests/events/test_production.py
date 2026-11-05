@@ -8,10 +8,10 @@ from unittest.mock import Mock
 
 # ** infra
 import pytest
-
-# ** app
 from tiferet.assets.core import TiferetError
 from tiferet.events.core import DomainEvent
+
+# ** app
 from tiferet_ly import assets as a
 from tiferet_ly.events.production import (
     AddProduction,

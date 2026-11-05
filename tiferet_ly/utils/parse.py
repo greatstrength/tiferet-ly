@@ -7,9 +7,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 # ** infra
 from ply import yacc
+from tiferet.interfaces.core import ServiceError
 
 # ** app
-from tiferet.interfaces.core import ServiceError
 from ..interfaces.parser import ParserService
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.lexeme import LexemeAggregate

@@ -7,9 +7,9 @@ import inspect
 
 # ** infra
 import pytest
+from tiferet.interfaces.core import ServiceError
 
 # ** app
-from tiferet.interfaces.core import ServiceError
 from tiferet_ly.mappers.production import (
     ComplexProductionRuleAggregate,
     SimpleProductionRuleAggregate,
@@ -26,6 +26,7 @@ from tiferet_ly.utils.translation import (
     RuleTranslator,
     rewrite_action,
 )
+import tiferet_ly.utils.translation as translation
 
 # *** functions
 
@@ -360,9 +361,6 @@ def test_no_ply_import() -> None:
     '''
     Test that the translator module does not import ply.
     '''
-
-    # Import the module under test and inspect its globals.
-    import tiferet_ly.utils.translation as translation
 
     # Assert ply is not among the module's imported names.
     assert 'ply' not in translation.__dict__

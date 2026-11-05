@@ -5,8 +5,10 @@
 # ** core
 from typing import Any, Dict, List, Optional, Union
 
-# ** app
+# ** infra
 from tiferet.repos.core import ConfigurationRepository
+
+# ** app
 from ..interfaces.production import ProductionService
 from ..mappers.core import (
     expand_keyed_entries,

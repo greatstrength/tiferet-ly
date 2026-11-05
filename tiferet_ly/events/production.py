@@ -5,8 +5,10 @@
 # ** core
 from typing import List, Optional, Union
 
-# ** app
+# ** infra
 from tiferet.events.core import DomainEvent
+
+# ** app
 from .. import assets as a
 from ..interfaces.grammar import GrammarService
 from ..interfaces.production import ProductionService

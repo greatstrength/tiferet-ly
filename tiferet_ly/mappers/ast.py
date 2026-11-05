@@ -5,8 +5,10 @@
 # ** core
 from typing import Any, List, Optional
 
-# ** app
+# ** infra
 from tiferet import Aggregate
+
+# ** app
 from ..domain.ast import AstNode
 
 # *** constants

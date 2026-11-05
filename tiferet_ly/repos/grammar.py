@@ -5,8 +5,10 @@
 # ** core
 from typing import List, Optional
 
-# ** app
+# ** infra
 from tiferet.repos.core import ConfigurationRepository
+
+# ** app
 from ..interfaces.grammar import GrammarService
 from ..mappers.grammar import (
     GrammarAggregate,

@@ -5,8 +5,10 @@
 # ** core
 from typing import Any
 
-# ** app
+# ** infra
 from tiferet import Aggregate
+
+# ** app
 from ..domain.lexeme import Lexeme
 
 # *** mappers
