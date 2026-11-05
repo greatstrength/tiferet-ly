@@ -4,7 +4,9 @@
 
 __all__ = [
     'error',
+    'lexer',
 ]
 
 # ** app
 from . import error
+from . import lexer

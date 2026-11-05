@@ -42,8 +42,9 @@ LexemeAggregate(type='TIMES', value='*', lineno=1, lexpos=3)
 LexemeAggregate(type='NUMBER', value=3, lineno=1, lexpos=4)
 ```
 
-Five lexemes, no `WS` lexeme in the sequence — the declared `WS` token
-matches and discards whitespace, it never reaches the returned list.
+Five lexemes, no whitespace lexeme in the sequence - the built-in default
+ignore character set skips spaces, tabs, and newlines before any token rule
+runs, so whitespace never reaches the returned list.
 
 ## 3. Parse, raw
 

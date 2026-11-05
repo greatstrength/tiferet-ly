@@ -11,7 +11,3 @@ tokens:
   - TIMES:
       grammar_id: arith
       pattern: '\*'
-  - WS:
-      grammar_id: arith
-      pattern: '\s+'
-      action: return None

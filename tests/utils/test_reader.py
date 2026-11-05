@@ -12,6 +12,7 @@ from tiferet import App
 from tiferet.interfaces.core import ServiceError
 
 # ** app
+from tiferet_ly import assets as a
 from tiferet_ly.domain.layout import LayoutProfile
 from tiferet_ly.events import lex as lex_events
 from tiferet_ly.events import parse as parse_events
@@ -356,10 +357,11 @@ def test_build_lexer_module_sets_t_ignore_when_declared() -> None:
     # Assert t_ignore is set to the exact declared pattern.
     assert module.t_ignore == ' \t'
 
-# ** test: build_lexer_module_omits_t_ignore_when_unset
-def test_build_lexer_module_omits_t_ignore_when_unset() -> None:
+# ** test: build_lexer_module_installs_default_ignore_when_unset
+def test_build_lexer_module_installs_default_ignore_when_unset() -> None:
     '''
-    Test that a grammar with no declared ignore leaves module.t_ignore unset.
+    Test that a grammar with no declared ignore installs the asset default
+    as module.t_ignore.
     '''
 
     # Build a lexer module for a grammar with no ignore declared.
@@ -373,8 +375,30 @@ def test_build_lexer_module_omits_t_ignore_when_unset() -> None:
         reader.make_t_error('arith'),
     )
 
-    # Assert no t_ignore attribute was installed.
-    assert not hasattr(module, 't_ignore')
+    # Assert t_ignore equals the built-in default ignore character set.
+    assert module.t_ignore == a.lexer.DEFAULT_IGNORE
+
+# ** test: build_lexer_module_honors_empty_ignore
+def test_build_lexer_module_honors_empty_ignore() -> None:
+    '''
+    Test that an explicit empty ignore string opts out of skipping and is
+    installed as module.t_ignore.
+    '''
+
+    # Build a lexer module for a grammar that opts out with an empty string.
+    target = grammar()
+    target.ignore = ''
+    reader = PlyReader()
+    _lexer, module = reader.build_lexer_module(
+        target,
+        [target],
+        [number_token()],
+        None,
+        reader.make_t_error('arith'),
+    )
+
+    # Assert t_ignore is the empty string, not the asset default.
+    assert module.t_ignore == ''
 
 # ** test: tokenize_honors_whitespace_override
 def test_tokenize_honors_whitespace_override() -> None:

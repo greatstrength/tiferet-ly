@@ -606,13 +606,17 @@ def test_dispatcher_keeps_reflags_spans_and_ignore() -> None:
         tokenize([complex_token('AB', pattern='a b')], 'ab')
     assert raised.value.error_code == LEX_ERROR_ID
 
-    # NL bumps lineno for the next lexeme.
+    # NL bumps lineno for the next lexeme. Opt out of the default ignore so
+    # the newline stays a token instead of being skipped as whitespace.
+    nl_grammar = grammar()
+    nl_grammar.ignore = ''
     result = tokenize(
         [
             complex_token('NL', pattern=r'\n', action='t.lexer.lineno += 1\nreturn t'),
             complex_token('X', pattern='x'),
         ],
         'x\nx',
+        target=nl_grammar,
     )
     assert [(lexeme.type, lexeme.lineno, lexeme.lexpos) for lexeme in result] == [
         ('X', 1, 0),

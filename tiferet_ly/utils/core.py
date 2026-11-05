@@ -13,6 +13,7 @@ from ply import lex
 from tiferet.interfaces.core import ServiceError
 
 # ** app
+from .. import assets as a
 from ..mappers.grammar import GrammarAggregate
 from ..mappers.token import TokenRuleAggregate
 from .grammar import GrammarRuleSelector
@@ -326,9 +327,11 @@ class PlyReader:
         self.install_token_attrs(module, selected, rewrites)
         module.t_error = self.bind_callable(module, 't_error', t_error)
 
-        # Install the declared ignore pattern as PLY's own t_ignore convention.
+        # Install ignore as PLY's t_ignore: grammar-own value wins, else the asset default.
         if grammar.ignore is not None:
             module.t_ignore = grammar.ignore
+        else:
+            module.t_ignore = a.lexer.DEFAULT_IGNORE
 
         # Rebuild every call; never write a lextab.
         try:
