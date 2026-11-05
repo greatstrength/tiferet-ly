@@ -7,8 +7,6 @@ from typing import List, Optional
 
 # ** infra
 from pydantic import Field
-
-# ** app
 from tiferet.domain.core import DomainObject
 
 # *** models
@@ -18,9 +16,9 @@ class LayoutProfile(DomainObject):
     '''
     A declared per-grammar lexical layout policy: which already-recognized
     tokens introduce a block or pair up as nesting delimiters, what to
-    name the synthetic indent/dedent tokens a LayoutFilter injects, and
-    whether a newline token is suppressed while delimiter depth is
-    nonzero.
+    name the synthetic indent/dedent tokens a LayoutFilter injects, the
+    positive column width one indentation level spans, and whether a
+    newline token is suppressed while delimiter depth is nonzero.
     '''
 
     # * attribute: block_tokens
@@ -75,5 +73,9 @@ class LayoutProfile(DomainObject):
     # * attribute: tab_size
     tab_size: int = Field(
         default=4,
-        description='The column-width one indentation level represents.',
+        ge=1,
+        description=(
+            'The positive column width one indentation level represents; '
+            'a literal tab in the source also counts as this width.'
+        ),
     )
