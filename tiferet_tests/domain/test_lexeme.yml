@@ -1,8 +1,12 @@
+# Replicates portable Lexeme domain cases under tiferet-tester (2.2.2b1).
+# Python counterpart tests/domain/test_lexeme.py is the RFP-018 stub; pytest
+# no longer collects cases here. Keep the stub so module run resolves.
+
 testers:
   test_lexeme:
     module_path: tiferet_ly.domain.lexeme
     class_name: Lexeme
-    attributes:
+    attributes: &span
       type: NUMBER
       value: 3
       lineno: 1
@@ -50,8 +54,22 @@ testers:
               - value
           - check: fields
             outcome: lexeme
-            fields:
-              type: NUMBER
-              value: 3
-              lineno: 1
-              lexpos: 0
+            fields: *span
+      missing_lexpos_rejected:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.lexeme
+              class_name: Lexeme
+            method: model_validate
+            args:
+              - type: NUMBER
+                value: 3
+                lineno: 1
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError

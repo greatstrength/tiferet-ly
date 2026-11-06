@@ -1,0 +1,302 @@
+# First-pass YAML replicate of tests/domain/test_production.py.
+# Dialect: method new is legal only on target self.
+
+testers:
+  test_simple_production_rule:
+    module_path: tiferet_ly.domain.production
+    class_name: SimpleProductionRule
+    attributes: &simple_attrs
+      name: expression
+      grammar_id: arithmetic
+      spec: 'expression : term'
+    tests:
+      simple_production_rule_construct:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: rule
+        assert:
+          - check: type
+            outcome: rule
+            module_path: tiferet_ly.domain.production
+            class_name: ProductionRule
+          - check: fields
+            outcome: rule
+            fields: *simple_attrs
+      simple_production_rule_requires_spec:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.production
+              class_name: SimpleProductionRule
+            method: model_validate
+            args:
+              - name: expression
+                grammar_id: arithmetic
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      production_rule_requires_grammar_id:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.production
+              class_name: SimpleProductionRule
+            method: model_validate
+            args:
+              - name: expression
+                spec: 'expression : term'
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      production_rule_names_may_repeat:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: first
+          - target:
+              module_path: tiferet_ly.domain.production
+              class_name: SimpleProductionRule
+            method: model_validate
+            args:
+              - name: expression
+                grammar_id: arithmetic
+                spec: 'expression : expression PLUS term'
+            as: second
+        assert:
+          - check: equals
+            outcome: first
+            attribute: name
+            equals: expression
+          - check: equals
+            outcome: second
+            attribute: name
+            equals: expression
+          - check: equals
+            outcome: first
+            attribute: spec
+            equals: 'expression : term'
+          - check: equals
+            outcome: second
+            attribute: spec
+            equals: 'expression : expression PLUS term'
+      production_rules_may_share_name_across_different_grammar_ids:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: first
+          - target:
+              module_path: tiferet_ly.domain.production
+              class_name: SimpleProductionRule
+            method: model_validate
+            args:
+              - name: expression
+                grammar_id: algebra
+                spec: 'expression : factor'
+            as: second
+        assert:
+          - check: equals
+            outcome: first
+            attribute: name
+            equals: expression
+          - check: equals
+            outcome: second
+            attribute: name
+            equals: expression
+          - check: equals
+            outcome: first
+            attribute: grammar_id
+            equals: arithmetic
+          - check: equals
+            outcome: second
+            attribute: grammar_id
+            equals: algebra
+
+  test_complex_production_rule:
+    module_path: tiferet_ly.domain.production
+    class_name: ComplexProductionRule
+    attributes: &complex_attrs
+      name: expression
+      grammar_id: arithmetic
+      spec: 'expression : expression PLUS term'
+      action: 'p[0] = p[1] + p[3]'
+    tests:
+      complex_production_rule_construct:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: rule
+        assert:
+          - check: type
+            outcome: rule
+            module_path: tiferet_ly.domain.production
+            class_name: ProductionRule
+          - check: fields
+            outcome: rule
+            fields: *complex_attrs
+      complex_production_rule_requires_action:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.production
+              class_name: ComplexProductionRule
+            method: model_validate
+            args:
+              - name: expression
+                grammar_id: arithmetic
+                spec: 'expression : term'
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+
+  test_production_rule_base:
+    module_path: tiferet_ly.domain.production
+    class_name: ProductionRule
+    attributes:
+      name: expression
+      grammar_id: arithmetic
+    tests:
+      production_rule_base_has_no_spec:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: rule
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.rule]
+            as: rule_cls
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.rule_cls, model_fields]
+            as: model_fields
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.model_fields]
+            as: field_names
+        assert:
+          - check: equals
+            outcome: field_names
+            equals:
+              - grammar_id
+              - name
+      production_rule_has_no_subgrammar_field:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: base_rule
+          - target:
+              module_path: tiferet_ly.domain.production
+              class_name: SimpleProductionRule
+            method: model_validate
+            args:
+              - name: expression
+                grammar_id: arithmetic
+                spec: 'expression : term'
+            as: simple_rule
+          - target:
+              module_path: tiferet_ly.domain.production
+              class_name: ComplexProductionRule
+            method: model_validate
+            args:
+              - name: expression
+                grammar_id: arithmetic
+                spec: 'expression : term'
+                action: 'p[0] = p[1]'
+            as: complex_rule
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.base_rule]
+            as: base_cls
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.simple_rule]
+            as: simple_cls
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.complex_rule]
+            as: complex_cls
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.base_cls, model_fields]
+            as: base_fields
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.simple_cls, model_fields]
+            as: simple_fields
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.complex_cls, model_fields]
+            as: complex_fields
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.base_fields]
+            as: base_names
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.simple_fields]
+            as: simple_names
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.complex_fields]
+            as: complex_names
+        assert:
+          - check: equals
+            outcome: base_names
+            equals:
+              - grammar_id
+              - name
+          - check: equals
+            outcome: simple_names
+            equals:
+              - grammar_id
+              - name
+              - spec
+          - check: equals
+            outcome: complex_names
+            equals:
+              - action
+              - grammar_id
+              - name
+              - spec

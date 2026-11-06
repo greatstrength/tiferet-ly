@@ -1,0 +1,86 @@
+# First-pass YAML replicate of tests/mappers/test_lexeme.py (synthesize + fields).
+# from_ply_token needs a stand-in namespace object; expressed via types.SimpleNamespace.
+
+testers:
+  test_lexeme_aggregate:
+    module_path: tiferet_ly.mappers.lexeme
+    class_name: LexemeAggregate
+    attributes:
+      type: PLUS
+      value: '+'
+      lineno: 2
+      lexpos: 4
+    tests:
+      from_ply_token_copies_span_fields:
+        conditions: {}
+        execute:
+          - target:
+              module_path: types
+              attribute: SimpleNamespace
+            method: SimpleNamespace
+            kwargs:
+              type: PLUS
+              value: '+'
+              lineno: 2
+              lexpos: 4
+            as: tok
+          - target:
+              module_path: tiferet_ly.mappers.lexeme
+              class_name: LexemeAggregate
+            method: from_ply_token
+            args: [$r.tok]
+            as: lexeme
+        assert:
+          - check: type
+            outcome: lexeme
+            module_path: tiferet_ly.mappers.lexeme
+            class_name: LexemeAggregate
+          - check: fields
+            outcome: lexeme
+            fields:
+              type: PLUS
+              value: '+'
+              lineno: 2
+              lexpos: 4
+      synthesize_constructs_without_a_ply_token:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.mappers.lexeme
+              class_name: LexemeAggregate
+            method: synthesize
+            args: [INDENT]
+            kwargs:
+              lineno: 3
+              lexpos: 12
+            as: lexeme
+        assert:
+          - check: type
+            outcome: lexeme
+            module_path: tiferet_ly.mappers.lexeme
+            class_name: LexemeAggregate
+          - check: fields
+            outcome: lexeme
+            fields:
+              type: INDENT
+              value: null
+              lineno: 3
+              lexpos: 12
+      synthesize_accepts_an_explicit_value:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.mappers.lexeme
+              class_name: LexemeAggregate
+            method: synthesize
+            args: [DEDENT]
+            kwargs:
+              lineno: 5
+              lexpos: 20
+              value: dedent
+            as: lexeme
+        assert:
+          - check: equals
+            outcome: lexeme
+            attribute: value
+            equals: dedent

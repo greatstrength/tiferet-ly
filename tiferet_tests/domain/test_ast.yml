@@ -1,0 +1,170 @@
+# First-pass YAML replicate of tests/domain/test_ast.py.
+# Dialect: method new is legal only on target self.
+
+testers:
+  test_ast_node:
+    module_path: tiferet_ly.domain.ast
+    class_name: AstNode
+    attributes: &leaf_attrs
+      kind: num
+      value: 1
+      lineno: 1
+      lexpos: 0
+    tests:
+      ast_node_construct:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: leaf
+          - target:
+              module_path: tiferet_ly.domain.ast
+              class_name: AstNode
+            method: model_validate
+            args:
+              - kind: add
+                children: [$r.leaf]
+                lineno: 1
+                lexpos: 0
+            as: node
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.node]
+            as: node_cls
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.node_cls, model_fields]
+            as: model_fields
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.model_fields]
+            as: field_names
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.node, children]
+            as: children
+          - target:
+              module_path: builtins
+              attribute: len
+            method: len
+            args: [$r.children]
+            as: child_count
+        assert:
+          - check: equals
+            outcome: node
+            attribute: kind
+            equals: add
+          - check: equals
+            outcome: child_count
+            equals: 1
+          - check: 'null'
+            outcome: node
+            attribute: value
+          - check: equals
+            outcome: node
+            attribute: lineno
+            equals: 1
+          - check: equals
+            outcome: node
+            attribute: lexpos
+            equals: 0
+          - check: equals
+            outcome: field_names
+            equals:
+              - children
+              - kind
+              - lexpos
+              - lineno
+              - value
+      ast_node_defaults:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.ast
+              class_name: AstNode
+            method: model_validate
+            args:
+              - kind: expr
+            as: node
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.node, children]
+            as: children
+          - target:
+              module_path: builtins
+              attribute: len
+            method: len
+            args: [$r.children]
+            as: child_count
+        assert:
+          - check: equals
+            outcome: child_count
+            equals: 0
+          - check: 'null'
+            outcome: node
+            attribute: value
+          - check: 'null'
+            outcome: node
+            attribute: lineno
+          - check: 'null'
+            outcome: node
+            attribute: lexpos
+      ast_node_requires_kind:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.ast
+              class_name: AstNode
+            method: model_validate
+            args:
+              - {}
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      ast_node_forbids_extra_fields:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.ast
+              class_name: AstNode
+            method: model_validate
+            args:
+              - kind: num
+                col: 2
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      ast_node_has_no_format:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: node
+          - target:
+              module_path: builtins
+              attribute: hasattr
+            method: hasattr
+            args: [$r.node, format]
+            as: has_format
+        assert:
+          - check: equals
+            outcome: has_format
+            equals: false

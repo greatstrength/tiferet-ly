@@ -1,0 +1,230 @@
+# First-pass YAML replicate of tests/domain/test_layout.py.
+# Parametrized pytest cases expanded. method new only on self.
+
+testers:
+  test_layout_profile:
+    module_path: tiferet_ly.domain.layout
+    class_name: LayoutProfile
+    attributes:
+      indent_token: INDENT
+      dedent_token: DEDENT
+    tests:
+      layout_profile_construct_minimal:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: profile
+        assert:
+          - check: fields
+            outcome: profile
+            fields:
+              indent_token: INDENT
+              dedent_token: DEDENT
+              block_tokens: []
+              open_delimiters: []
+              close_delimiters: []
+              newline_token: null
+              suppress_newline_in_delimiters: true
+              tab_size: 4
+      layout_profile_construct_full:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - block_tokens: [IF, FOR, DEF]
+                open_delimiters: [LPAREN]
+                close_delimiters: [RPAREN]
+                newline_token: NEWLINE
+                suppress_newline_in_delimiters: true
+                indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: 4
+            as: profile
+        assert:
+          - check: fields
+            outcome: profile
+            fields:
+              block_tokens: [IF, FOR, DEF]
+              open_delimiters: [LPAREN]
+              close_delimiters: [RPAREN]
+              newline_token: NEWLINE
+              suppress_newline_in_delimiters: true
+              indent_token: INDENT
+              dedent_token: DEDENT
+              tab_size: 4
+      layout_profile_requires_indent_token:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - dedent_token: DEDENT
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      layout_profile_requires_dedent_token:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      layout_profile_forbids_extra_fields:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                unknown: value
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      layout_profile_rejects_tab_size_zero:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: 0
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      layout_profile_rejects_tab_size_negative:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: -1
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      layout_profile_rejects_tab_size_false:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: false
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      layout_profile_accepts_tab_size_one:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: 1
+            as: profile
+        assert:
+          - check: equals
+            outcome: profile
+            attribute: tab_size
+            equals: 1
+      layout_profile_accepts_tab_size_true:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: true
+            as: profile
+        assert:
+          - check: equals
+            outcome: profile
+            attribute: tab_size
+            equals: 1
+      layout_profile_accepts_tab_size_float:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: 4.0
+            as: profile
+        assert:
+          - check: equals
+            outcome: profile
+            attribute: tab_size
+            equals: 4
+      layout_profile_accepts_tab_size_str:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.layout
+              class_name: LayoutProfile
+            method: model_validate
+            args:
+              - indent_token: INDENT
+                dedent_token: DEDENT
+                tab_size: '4'
+            as: profile
+        assert:
+          - check: equals
+            outcome: profile
+            attribute: tab_size
+            equals: 4

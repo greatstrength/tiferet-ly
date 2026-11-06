@@ -1,0 +1,352 @@
+# First-pass YAML replicate of tests/domain/test_token.py.
+# Pytest suite remains the gate; these cases mirror portable construct/raises.
+
+testers:
+  test_simple_token_rule:
+    module_path: tiferet_ly.domain.token
+    class_name: SimpleTokenRule
+    attributes: &simple_attrs
+      name: PLUS
+      grammar_id: arithmetic
+      pattern: '\+'
+    tests:
+      simple_token_rule_construct:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: rule
+        assert:
+          - check: type
+            outcome: rule
+            module_path: tiferet_ly.domain.token
+            class_name: TokenRule
+          - check: fields
+            outcome: rule
+            fields: *simple_attrs
+      simple_token_rule_requires_pattern:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: SimpleTokenRule
+            method: model_validate
+            args:
+              - name: PLUS
+                grammar_id: arithmetic
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      token_rule_forbids_extra_fields:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: SimpleTokenRule
+            method: model_validate
+            args:
+              - name: PLUS
+                grammar_id: arithmetic
+                pattern: '\+'
+                unknown: value
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      token_rule_requires_grammar_id:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: SimpleTokenRule
+            method: model_validate
+            args:
+              - name: PLUS
+                pattern: '\+'
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+      token_rules_may_share_name_across_different_grammar_ids:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: first
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: SimpleTokenRule
+            method: model_validate
+            args:
+              - name: PLUS
+                grammar_id: algebra
+                pattern: '\+\+'
+            as: second
+        assert:
+          - check: equals
+            outcome: first
+            attribute: name
+            equals: PLUS
+          - check: equals
+            outcome: second
+            attribute: name
+            equals: PLUS
+          - check: equals
+            outcome: first
+            attribute: grammar_id
+            equals: arithmetic
+          - check: equals
+            outcome: second
+            attribute: grammar_id
+            equals: algebra
+
+  test_complex_token_rule:
+    module_path: tiferet_ly.domain.token
+    class_name: ComplexTokenRule
+    attributes: &complex_attrs
+      name: NUMBER
+      grammar_id: arithmetic
+      pattern: '\d+'
+      action: "t.value = int(t.value)\nreturn t"
+    tests:
+      complex_token_rule_construct:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: rule
+        assert:
+          - check: type
+            outcome: rule
+            module_path: tiferet_ly.domain.token
+            class_name: TokenRule
+          - check: fields
+            outcome: rule
+            fields: *complex_attrs
+      complex_token_rule_requires_action:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: ComplexTokenRule
+            method: model_validate
+            args:
+              - name: NUMBER
+                grammar_id: arithmetic
+                pattern: '\d+'
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+
+  test_synthetic_token_rule:
+    module_path: tiferet_ly.domain.token
+    class_name: SyntheticTokenRule
+    attributes: &synthetic_attrs
+      name: INDENT
+      grammar_id: arithmetic
+    tests:
+      synthetic_token_rule_construct:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: rule
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.rule]
+            as: rule_cls
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.rule_cls, model_fields]
+            as: model_fields
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.model_fields]
+            as: field_names
+        assert:
+          - check: type
+            outcome: rule
+            module_path: tiferet_ly.domain.token
+            class_name: TokenRule
+          - check: fields
+            outcome: rule
+            fields: *synthetic_attrs
+          - check: equals
+            outcome: field_names
+            equals:
+              - grammar_id
+              - name
+      synthetic_token_rule_forbids_pattern:
+        conditions: {}
+        execute:
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: SyntheticTokenRule
+            method: model_validate
+            args:
+              - name: INDENT
+                grammar_id: arithmetic
+                pattern: '\s+'
+            raises: true
+            as: failure
+        assert:
+          - check: type
+            outcome: failure
+            module_path: pydantic
+            class_name: ValidationError
+
+  test_token_rule_base:
+    module_path: tiferet_ly.domain.token
+    class_name: TokenRule
+    attributes:
+      name: BASE
+      grammar_id: arithmetic
+    tests:
+      token_rule_base_has_no_pattern:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: rule
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.rule]
+            as: rule_cls
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.rule_cls, model_fields]
+            as: model_fields
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.model_fields]
+            as: field_names
+        assert:
+          - check: equals
+            outcome: field_names
+            equals:
+              - grammar_id
+              - name
+      token_rule_has_no_subgrammar_field:
+        conditions: {}
+        execute:
+          - target: self
+            method: new
+            as: base_rule
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: SimpleTokenRule
+            method: model_validate
+            args:
+              - name: PLUS
+                grammar_id: arithmetic
+                pattern: '\+'
+            as: simple_rule
+          - target:
+              module_path: tiferet_ly.domain.token
+              class_name: ComplexTokenRule
+            method: model_validate
+            args:
+              - name: NUMBER
+                grammar_id: arithmetic
+                pattern: '\d+'
+                action: return t
+            as: complex_rule
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.base_rule]
+            as: base_cls
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.simple_rule]
+            as: simple_cls
+          - target:
+              module_path: builtins
+              attribute: type
+            method: type
+            args: [$r.complex_rule]
+            as: complex_cls
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.base_cls, model_fields]
+            as: base_fields
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.simple_cls, model_fields]
+            as: simple_fields
+          - target:
+              module_path: builtins
+              attribute: getattr
+            method: getattr
+            args: [$r.complex_cls, model_fields]
+            as: complex_fields
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.base_fields]
+            as: base_names
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.simple_fields]
+            as: simple_names
+          - target:
+              module_path: builtins
+              attribute: sorted
+            method: sorted
+            args: [$r.complex_fields]
+            as: complex_names
+        assert:
+          - check: equals
+            outcome: base_names
+            equals:
+              - grammar_id
+              - name
+          - check: equals
+            outcome: simple_names
+            equals:
+              - grammar_id
+              - name
+              - pattern
+          - check: equals
+            outcome: complex_names
+            equals:
+              - action
+              - grammar_id
+              - name
+              - pattern
